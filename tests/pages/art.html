@@ -1,0 +1,23 @@
+<!doctype html><html><body style="margin:0;background:#2a3350">
+<canvas id="c" width="1600" height="980"></canvas>
+<script type="module">
+import { createPawn } from '/src/sim/pawn.js';
+import { pawnSheet, FW, FH } from '/src/render/pawnart.js';
+import { RNG } from '/src/core/rng.js';
+const ctx = document.getElementById('c').getContext('2d'); ctx.imageSmoothingEnabled = false;
+const rng = new RNG(+(new URLSearchParams(location.search).get('seed') || 7));
+const S = 4;
+for (let row = 0; row < 5; row++) for (let col = 0; col < 12; col++) {
+  const era = row * 2 + (col >= 6 ? 1 : 0);
+  const p = createPawn(rng, { age: col % 6 === 5 ? 9 : rng.range(18, 70), region: rng.next() });
+  p.role = ['citizen', 'citizen', 'soldier', 'citizen', 'doctor', 'citizen'][col % 6];
+  if (col % 6 === 3) p.role = rng.chance(0.5) ? 'prophet' : 'leader';
+  p.mood = rng.range(10, 90);
+  const sheet = pawnSheet(p, era, '#4fb0ff');
+  const frame = [0, 2, 8, 0, 6, 3][col % 6];
+  const sc = p.age < 14 ? 0.65 : 1;
+  ctx.drawImage(sheet, frame * FW, 0, FW, FH, 10 + col * 130, 10 + row * 195 + (1 - sc) * FH * S, FW * S * sc, FH * S * sc);
+  ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.fillText(`e${era} ${p.sex} ${p.role} f${p.look.fat.toFixed(1)} m${p.look.muscle.toFixed(1)}`, 10 + col * 130, 205 + row * 195);
+}
+document.title = 'done';
+</script></body></html>

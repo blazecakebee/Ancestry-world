@@ -1,0 +1,15 @@
+{
+  "name": "ancestry-world",
+  "version": "0.1.0",
+  "description": "Ancestry World — a co-op pixel-art god simulator and civilization sandbox.",
+  "type": "module",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node server/server.js --port 8080",
+    "test": "node tests/sim.test.js && node tests/net.test.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": { "ws": "^8.18.0" },
+  "license": "MIT"
+}

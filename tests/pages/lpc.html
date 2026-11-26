@@ -1,0 +1,28 @@
+<!doctype html><html><body style="margin:0;background:#2a3350">
+<canvas id="c" width="1600" height="1000"></canvas>
+<script type="module">
+import { createPawn } from '/src/sim/pawn.js';
+import { loadLPC, lpcSheet, LW, LH } from '/src/render/lpc.js';
+import { RNG } from '/src/core/rng.js';
+await loadLPC();
+const ctx = document.getElementById('c').getContext('2d'); ctx.imageSmoothingEnabled = false;
+const rng = new RNG(+(new URLSearchParams(location.search).get('seed') || 3));
+const S = 3, todo = [];
+for (let row = 0; row < 5; row++) for (let col = 0; col < 10; col++) {
+  const era = row * 2 + (col >= 5 ? 1 : 0);
+  const p = createPawn(rng, { age: rng.range(18, 70), region: rng.next(), race: ['human','human','elf','orc','human'][col % 5] });
+  p.role = ['citizen', 'soldier', 'doctor', 'prophet', 'leader'][(col + row) % 5];
+  todo.push({ p, era, row, col });
+}
+for (let tries = 0; tries < 60 && todo.length; tries++) {
+  for (const t of todo.slice()) {
+    const c = lpcSheet(t.p, t.era, t.p.role); if (!c) continue;
+    todo.splice(todo.indexOf(t), 1);
+    const fr = t.p.role === 'soldier' ? [2, 4 + 2] : [0, 2];
+    ctx.drawImage(c, fr[0] * LW, fr[1] * LH, LW, LH, 10 + t.col * 158, 10 + t.row * 195, LW * S, LH * S);
+    ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.fillText(`${t.p.race} e${t.era} ${t.p.sex} ${t.p.role}`, 10 + t.col * 158, 195 + t.row * 195);
+  }
+  await new Promise((r) => setTimeout(r, 100));
+}
+document.title = 'done';
+</script></body></html>

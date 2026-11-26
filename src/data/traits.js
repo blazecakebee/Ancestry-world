@@ -1,0 +1,66 @@
+// Individual traits (RimWorld-style personality + WorldBox-style body/spirit traits).
+// fx keys are read by the simulation: mood, breakOff, work, research, melee, ranged, hp, speed,
+// social, glitter, hunger, learn, immunity, fertility, lifespan, pain, dmgTaken, size, violence, beauty.
+// group: traits sharing a group are mutually exclusive. inherit: chance a child inherits it from a parent.
+export const TRAITS = {
+  // ---- Mind ----
+  genius:      { name: 'Genius', cat: 'mind', color: '#7fd3ff', group: 'intellect', inherit: 0.25, w: 3, fx: { research: 0.6, learn: 0.3 }, desc: 'A brilliant mind. Researches far faster and learns quickly.' },
+  dullard:     { name: 'Dull-witted', cat: 'mind', color: '#9a9a9a', group: 'intellect', inherit: 0.2, w: 4, fx: { research: -0.4, learn: -0.25 }, desc: 'Slow to grasp new ideas.' },
+  inventive:   { name: 'Inventive', cat: 'mind', color: '#ffd46b', inherit: 0.15, w: 4, fx: { research: 0.25, work: 0.1 }, desc: 'Tinkers constantly. Occasionally sparks a breakthrough idea.' },
+  fastLearner: { name: 'Fast Learner', cat: 'mind', color: '#9ef0c8', group: 'learning', inherit: 0.15, w: 4, fx: { learn: 0.75 }, desc: 'Gains skill experience 75% faster.' },
+  slowLearner: { name: 'Slow Learner', cat: 'mind', color: '#b09d87', group: 'learning', inherit: 0.15, w: 3, fx: { learn: -0.6 }, desc: 'Struggles to improve at anything.' },
+  greatMemory: { name: 'Great Memory', cat: 'mind', color: '#a8e0ff', inherit: 0.1, w: 3, fx: { learn: 0.15 }, desc: 'Skills never rust.' },
+  // ---- Spirit / temperament ----
+  zealot:      { name: 'Zealot', cat: 'spirit', color: '#ffcc33', group: 'faith', inherit: 0.2, w: 4, fx: { glitter: 1.0, breakOff: 2 }, desc: 'Worships fervently: a fountain of Glitter, but rigid. May rise as a prophet.' },
+  skeptic:     { name: 'Skeptic', cat: 'spirit', color: '#8fb3c9', group: 'faith', inherit: 0.15, w: 4, fx: { glitter: -0.6, research: 0.1 }, desc: 'Doubts the divine. Generates little Glitter, but thinks clearly.' },
+  pacifist:    { name: 'Pacifist', cat: 'spirit', color: '#b8f5b0', group: 'violence', inherit: 0.15, w: 4, fx: { melee: -0.5, ranged: -0.5, violence: -1, social: 0.1 }, desc: 'Refuses to start fights. Calms tensions.' },
+  bloodthirsty:{ name: 'Bloodthirsty', cat: 'spirit', color: '#ff5a5a', group: 'violence', inherit: 0.15, w: 3, fx: { melee: 0.3, violence: 1, mood: -4 }, desc: 'Craves battle. Happier in war, restless in peace.' },
+  optimist:    { name: 'Optimist', cat: 'spirit', color: '#ffe9a6', group: 'outlook', inherit: 0.2, w: 5, fx: { mood: 10 }, desc: 'Always sees the bright side. +10 mood.' },
+  pessimist:   { name: 'Pessimist', cat: 'spirit', color: '#8a8aa8', group: 'outlook', inherit: 0.2, w: 4, fx: { mood: -10 }, desc: 'Expects the worst. -10 mood.' },
+  ironWilled:  { name: 'Iron-Willed', cat: 'spirit', color: '#c7c7d6', group: 'nerves', inherit: 0.1, w: 3, fx: { breakOff: -14 }, desc: 'Almost never breaks under pressure.' },
+  volatile:    { name: 'Volatile', cat: 'spirit', color: '#ff9a4d', group: 'nerves', inherit: 0.1, w: 3, fx: { breakOff: 12 }, desc: 'Snaps easily. Prone to mental breaks.' },
+  stoic:       { name: 'Stoic', cat: 'spirit', color: '#cfd8dc', inherit: 0.1, w: 3, fx: { pain: 0.5, breakOff: -6 }, desc: 'Endures pain and hardship without complaint.' },
+  paranoid:    { name: 'Paranoid', cat: 'spirit', color: '#a77bd6', inherit: 0.1, w: 3, fx: { mood: -3, social: -0.2 }, desc: 'Sees plots everywhere. Lowers opinions of others; may start rumors.' },
+  ambitious:   { name: 'Ambitious', cat: 'spirit', color: '#ffb347', group: 'drive', inherit: 0.15, w: 4, fx: { work: 0.1 }, desc: 'Wants power. Likely to seek leadership — or rebel.' },
+  content:     { name: 'Content', cat: 'spirit', color: '#cdeac0', group: 'drive', inherit: 0.15, w: 4, fx: { mood: 4 }, desc: 'Happy with what they have. Never schemes.' },
+  industrious: { name: 'Industrious', cat: 'spirit', color: '#7ecf6a', group: 'diligence', inherit: 0.15, w: 4, fx: { work: 0.35 }, desc: 'Works 35% faster.' },
+  lazy:        { name: 'Lazy', cat: 'spirit', color: '#a0907a', group: 'diligence', inherit: 0.15, w: 4, fx: { work: -0.3 }, desc: 'Works 30% slower and naps often.' },
+  pyromaniac:  { name: 'Pyromaniac', cat: 'spirit', color: '#ff6a1a', inherit: 0.08, w: 2, fx: { mood: 0 }, desc: 'Loves fire. Will not fight fires and may start one during a breakdown.' },
+  psychopath:  { name: 'Psychopath', cat: 'spirit', color: '#7a1f2b', inherit: 0.05, w: 1, fx: { social: -0.3 }, desc: 'Feels nothing when others suffer or die.' },
+  nightOwl:    { name: 'Night Owl', cat: 'spirit', color: '#6c7bd9', inherit: 0.1, w: 3, fx: {}, desc: 'Prefers to work at night; unhappy in daylight.' },
+  gourmand:    { name: 'Gourmand', cat: 'spirit', color: '#e8a26a', group: 'appetite', inherit: 0.1, w: 3, fx: { hunger: 0.5, work: 0.05 }, desc: 'Eats a lot, cooks well. May binge when stressed.' },
+  ascetic:     { name: 'Ascetic', cat: 'spirit', color: '#d6d0b8', group: 'appetite', inherit: 0.1, w: 3, fx: { hunger: -0.15, glitter: 0.2 }, desc: 'Needs little. Indifferent to food quality and comfort.' },
+  greedy:      { name: 'Greedy', cat: 'spirit', color: '#e3c25a', inherit: 0.1, w: 3, fx: { mood: -3 }, desc: 'Wants the finest home and goods.' },
+  kind:        { name: 'Kind', cat: 'social', color: '#ff9ec7', group: 'manner', inherit: 0.15, w: 4, fx: { social: 0.3 }, desc: 'Never insults anyone. Lifts the mood of those nearby.' },
+  abrasive:    { name: 'Abrasive', cat: 'social', color: '#b86f50', group: 'manner', inherit: 0.15, w: 4, fx: { social: -0.35 }, desc: 'Says what they think — usually rudely.' },
+  charismatic: { name: 'Charismatic', cat: 'social', color: '#ff7ad9', inherit: 0.15, w: 3, fx: { social: 0.6, glitter: 0.2 }, desc: 'Magnetic presence. Natural leader, diplomat and preacher.' },
+  // ---- Body ----
+  giant:       { name: 'Giant', cat: 'body', color: '#c49a6c', group: 'size', inherit: 0.35, w: 2, fx: { size: 0.22, hp: 0.4, melee: 0.3, speed: -0.1, hunger: 0.4 }, desc: 'Towers over everyone. Strong, tough and always hungry.' },
+  tiny:        { name: 'Tiny', cat: 'body', color: '#c9b79c', group: 'size', inherit: 0.35, w: 2, fx: { size: -0.14, hp: -0.25, speed: 0.1, hunger: -0.3 }, desc: 'Small and nimble.' },
+  strong:      { name: 'Strong', cat: 'body', color: '#d98c5f', group: 'strength', inherit: 0.3, w: 4, fx: { melee: 0.25, work: 0.1 }, desc: 'Powerful muscles.' },
+  weak:        { name: 'Weak', cat: 'body', color: '#a39a8d', group: 'strength', inherit: 0.3, w: 3, fx: { melee: -0.25, work: -0.1 }, desc: 'Frail strength.' },
+  tough:       { name: 'Tough', cat: 'body', color: '#a8a8a8', group: 'durability', inherit: 0.2, w: 3, fx: { dmgTaken: -0.5 }, desc: 'Takes half damage.' },
+  fragile:     { name: 'Fragile', cat: 'body', color: '#e6d4ff', group: 'durability', inherit: 0.2, w: 3, fx: { dmgTaken: 0.4, hp: -0.15 }, desc: 'Easily injured.' },
+  nimble:      { name: 'Nimble', cat: 'body', color: '#9ef7ff', group: 'agility', inherit: 0.2, w: 3, fx: { speed: 0.2, melee: 0.1 }, desc: 'Quick on their feet.' },
+  slowpoke:    { name: 'Slowpoke', cat: 'body', color: '#a58f73', group: 'agility', inherit: 0.2, w: 3, fx: { speed: -0.2 }, desc: 'Moves slowly.' },
+  beautiful:   { name: 'Beautiful', cat: 'body', color: '#ffc2e0', group: 'looks', inherit: 0.3, w: 3, fx: { beauty: 2, social: 0.1 }, desc: 'Strikingly attractive.' },
+  ugly:        { name: 'Ugly', cat: 'body', color: '#8e8263', group: 'looks', inherit: 0.3, w: 3, fx: { beauty: -2 }, desc: 'Others find them unpleasant to look at.' },
+  sickly:      { name: 'Sickly', cat: 'body', color: '#b5c99a', group: 'immunity', inherit: 0.25, w: 3, fx: { immunity: -0.5 }, desc: 'Catches every disease going.' },
+  superImmune: { name: 'Super-Immune', cat: 'body', color: '#7cffb2', group: 'immunity', inherit: 0.25, w: 2, fx: { immunity: 0.6 }, desc: 'Shrugs off plagues.' },
+  fertile:     { name: 'Fertile', cat: 'body', color: '#ffb0b0', group: 'fertility', inherit: 0.3, w: 3, fx: { fertility: 0.8 }, desc: 'Has many children.' },
+  infertile:   { name: 'Infertile', cat: 'body', color: '#999', group: 'fertility', inherit: 0.1, w: 2, fx: { fertility: -1 }, desc: 'Cannot have children.' },
+  longLived:   { name: 'Long-Lived', cat: 'body', color: '#d4f4dd', group: 'lifespan', inherit: 0.35, w: 2, fx: { lifespan: 25 }, desc: 'Ages slowly. +25 years lifespan.' },
+  shortLived:  { name: 'Short-Lived', cat: 'body', color: '#c7a6a6', group: 'lifespan', inherit: 0.35, w: 2, fx: { lifespan: -20 }, desc: 'Burns bright, dies young.' },
+  // ---- Special (rare) ----
+  starBlessed: { name: 'Star-Blessed', cat: 'special', color: '#fff27a', inherit: 0.05, w: 0.6, fx: { glitter: 0.8, mood: 6, research: 0.2, melee: 0.2, lifespan: 15 }, desc: 'Born under a falling star. Touched by the divine.' },
+  // ---- Acquired (never rolled at birth) ----
+  veteran:     { name: 'Veteran', cat: 'acquired', color: '#d0b070', acquired: true, fx: { melee: 0.25, ranged: 0.25, mood: -2 }, desc: 'Survived many battles.' },
+  scarred:     { name: 'Scarred', cat: 'acquired', color: '#b07a6a', acquired: true, fx: { beauty: -1, pain: 0.2 }, desc: 'Bears old battle scars.' },
+  plagueSurvivor: { name: 'Plague Survivor', cat: 'acquired', color: '#9fe39f', acquired: true, fx: { immunity: 0.4 }, desc: 'Lived through a plague.' },
+  prophet:     { name: 'Prophet', cat: 'acquired', color: '#ffe066', acquired: true, fx: { glitter: 2, social: 0.4 }, desc: 'Hears the voice of their god. Preaches to the masses.' },
+  champion:    { name: 'Divine Champion', cat: 'acquired', color: '#fff6b0', acquired: true, fx: { melee: 1, ranged: 1, hp: 1, dmgTaken: -0.4, mood: 10 }, desc: 'An avatar of the patron deity.' },
+  blessed:     { name: 'Blessed', cat: 'acquired', color: '#ffeaa0', acquired: true, fx: { mood: 8, work: 0.15 }, desc: 'Recently touched by a miracle.' },
+  madness:     { name: 'Madness', cat: 'acquired', color: '#c040c0', acquired: true, fx: { breakOff: 20, research: 0.2 }, desc: 'Their mind has cracked.' },
+};
+export const TRAIT_IDS = Object.keys(TRAITS);
+export const BIRTH_TRAITS = TRAIT_IDS.filter((t) => !TRAITS[t].acquired);

@@ -1,0 +1,7 @@
+node_modules/
+.DS_Store
+*.log
+
+# Character pack built from a third-party dataset: check its license before publishing.
+# Remove this line to commit it.
+assets/packs/characters/
