@@ -35,7 +35,7 @@ function rectOf(sheet, r) { const e = g(sheet); return e.ok ? { im: e.im, x: r[0
 export function prop(key) { const fr = GA.man?.frames[key]; return fr ? rectOf(fr[0], fr.slice(1)) : null; }
 
 // Entries in the pack's decor lists that are not ground cover: the clothesline (pile #2) and a pumpkin (tuft #24). Never scatter them.
-const NATURE_BAD = { pile: new Set([2]), tuft: new Set([24]) };
+const NATURE_BAD = { pile: new Set([2]), tuft: new Set([24]), rock: new Set([3]) };
 /** Ground decoration pools by tone: 'g' green, 'a' autumn/dry, 's' snow. */
 export function nature(cat, tone, h) {
   const list = GA.man?.nature[cat]; if (!list) return null;

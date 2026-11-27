@@ -8,7 +8,6 @@
     "start": "node server/server.js",
     "dev": "node server/server.js --port 8080",
     "test": "node tests/sim.test.js && node tests/net.test.js",
-    "changelog": "node tools/changelog-md.mjs",
     "changelog": "node tools/changelog-md.mjs"
   },
   "engines": { "node": ">=18" },

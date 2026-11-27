@@ -12,6 +12,10 @@ import { GCH, gcharSheet, loadGChar, GW, GH, GFOOT, GTOP, GROW } from './gchar.j
 import * as GAN from './gandalf.js';
 import { loadFarm, farmFrame, cropFrame } from './farm.js';
 // which Modern Farm crop (row in crops.png) a field draws: staples common, exotics rare
+// how wide a Modern Farm sprite is drawn relative to the building's (already enlarged) footprint
+const FIT_NAME = { 'me:statue_brown': 0.5, 'me:statue_grey': 0.5, 'me:statue_angel': 0.7, 'me:fountain3': 0.95, 'me:fountain2': 0.75, 'me:windmill': 0.7, 'me:radiotower': 0.75, 'me:turbine': 0.6,
+  'me:helipad': 1.2, 'me:palace': 1.2, 'me:hospital': 1.35, 'me:school': 1.2, 'me:clocktower': 0.8, 'me:coffee': 0.6, 'me:mushroom': 0.65, 'me:chapel': 0.8, 'me:tent_mil': 1.0, 'me:hangar': 1.15, 'me:mall': 1.35, 'me:greenhouse': 1.05 };
+const MF_FIT = { storage: 1.05, kitchen: 1.0, workshop: 0.95, tailor: 0.8, well: 0.7, coop: 0.85, market: 1.05, hut: 1.0, center: 1.1, tavern: 1.05, barracks: 1.15, healer: 0.85, stable: 1.4 };
 const CROP_POOL = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
 import { FX } from './fx.js';
 import { Globe, drawFarPlanets } from './globe.js';
@@ -23,6 +27,10 @@ import { hash2 } from '../core/rng.js';
 import { RACES } from '../data/races.js';
 import { ANIMALS } from '../sim/combat.js';
 import { dateString } from '../sim/world.js';
+import { loadMFarm, mfName, mfSprite, itemImage, MF_FRAMES, DECOR, decorBand, decorSprite } from './mfarm.js';
+import { topItems } from '../sim/items.js';
+import { remainingCost } from '../sim/ai.js';
+import { CAT_DEFAULT, itemCat } from '../data/items.js';
 
 const CH = 16; // chunk size in tiles
 const FEAT_TONE = { [B.SAVANNA]: 'a', [B.DESERT]: 'a', [B.BEACH]: 'a', [B.TAIGA]: 's', [B.TUNDRA]: 's', [B.MOUNTAIN]: 's', [B.STEPPE]: 'a', [B.BADLANDS]: 'a', [B.AUTUMN]: 'a', [B.PEAK]: 's', [B.ICE]: 's' };
@@ -45,7 +53,7 @@ export class Renderer {
     this.weatherParts = [];
     this.dpr = 1;
     this.resize();
-    loadGandalf0(this); loadGChar(); setTimeout(() => { try { GAN.warmSpx(['round_light_burst_001', 'round_sparkle_burst_001', 'round_sparkle_burst_002', 'round_sparkle_burst_003', 'round_heart_burst_001', 'spell_heal_001', 'symmetrical_impact_001', 'spell_death_001', 'scifi_spark_burst_001', 'epic_explosion_001', 'epic_explosion_002', 'lightning_strike_001', 'lightning_burst_001', 'stylized_explosion_001', 'spell_poison_001']); } catch (e) { /* optional */ } }, 4000); loadFarm(() => this.chunks.clear());
+    loadGandalf0(this); loadGChar(); setTimeout(() => { try { GAN.warmSpx(['round_light_burst_001', 'round_sparkle_burst_001', 'round_sparkle_burst_002', 'round_sparkle_burst_003', 'round_heart_burst_001', 'spell_heal_001', 'symmetrical_impact_001', 'spell_death_001', 'scifi_spark_burst_001', 'epic_explosion_001', 'epic_explosion_002', 'lightning_strike_001', 'lightning_burst_001', 'stylized_explosion_001', 'spell_poison_001']); } catch (e) { /* optional */ } }, 4000); loadFarm(() => this.chunks.clear()); loadMFarm();
   }
   attach(world) {
     this.world = world;
@@ -313,6 +321,7 @@ export class Renderer {
     const w = this.world; if (!w) return;
     const adt = w.paused && !this.menuMode ? 0 : dt; // paused world = frozen animation (walk cycles, water, clouds, particles, ragdolls)
     this.time += adt; this.rtime = (this.rtime || 0) + dt;
+    this.atime = (this.atime || 0) + adt * (this.menuMode ? 1 : Math.min(5, w.speed || 1)); // creature animation runs with the world clock, so 5x looks 5x
     this.chunkBudget = 6;
     const c = this.cam;
     // zooming out toward the planet is deliberately slow and cinematic; zooming back in stays snappy
@@ -457,10 +466,15 @@ export class Renderer {
     }
     const inView = (px, py) => { const ddx = wdx(c.x, px, W); return Math.abs(ddx) < this.W / 2 / T + 2 && py > y0 - 2 && py < y1 + 3; };
     for (const an of Object.values(w.animals)) if (inView(an.x, an.y)) list.push({ y: an.y, k: 2, a: an });
+    for (const d of Object.values(w.drops || {})) if (inView(d.x, d.y)) list.push({ y: d.y - 0.05, k: 6, d });
+    if (T > 14) for (const st of Object.values(w.settlements)) { // street furniture: farmyard clutter -> carts & flowers -> lamps, benches, kiosks
+      if (!inView(st.x, st.y) && !inView(st.x + st.radius, st.y) && !inView(st.x - st.radius, st.y)) continue;
+      for (const dd of this.settlementDecor(st)) { const i = dd.y * W + wrap(dd.x, W); if (t.feat[i] || t.bld[i] >= 0) continue; if (inView(dd.x + 0.5, dd.y + 0.9)) list.push({ y: dd.y + 0.9, k: 7, dd }); }
+    }
     this.sheetBudget = 30;
     for (const p of Object.values(w.pawns)) {
       if (p.rx === undefined || Math.abs(wdx(p.rx, p.x, W)) > 6 || Math.abs(p.ry - p.y) > 6) { p.rx = p.x; p.ry = p.y; }
-      const k = Math.min(1, dt * 14);
+      const k = Math.min(1, dt * 14 * Math.max(1, Math.sqrt(w.speed || 1)));
       const ddx = wdx(p.rx, p.x, W), ddy = p.y - p.ry;
       p.rx = wrap(p.rx + ddx * k, W); p.ry += ddy * k;
       if (Math.abs(ddx) + Math.abs(ddy) > 0.003) { p._dir = Math.abs(ddx) > Math.abs(ddy) * 0.8 ? (ddx < 0 ? DIR.LEFT : DIR.RIGHT) : (ddy < 0 ? DIR.BACK : DIR.FRONT); p._moving = this.time; }
@@ -485,19 +499,30 @@ export class Renderer {
       } else if (e.k === 1) this.drawBuilding(ctx, e.b, s);
       else if (e.k === 2) {
         const an = e.a, [sx, sy] = this.worldToScreen(an.x, an.y), AD = ANIMALS[an.kind] || {}, art = AD.art || an.kind, kid = an.baby ? 0.68 : 1, sz = s * 1.5 * (AD.size > 1.3 ? 1.25 : 1) * kid;
-        const ff = farmFrame(art, an.id || 0, this.time + (an.id || 0) * 0.37, an.moving && !an.dead);
-        const pf = ff ? null : GAN.petFrame(an.kind, this.time + (an.id || 0) * 0.37, an.moving);
+        const ff = farmFrame(art, an.id || 0, this.atime + (an.id || 0) * 0.37, an.moving && !an.dead);
+        const pf = ff ? null : GAN.petFrame(an.kind, this.atime + (an.id || 0) * 0.37, an.moving);
         ctx.save(); ctx.translate(Math.round(sx), Math.round(sy));
         if (an.facing < 0) ctx.scale(-1, 1);
-        if (ff) { const K = { cow: 0.62, sheep: 0.85, dog: 0.62, cat: 0.8, horse: 0.62, pig: 0.8, goat: 0.8, chicken: 0.85, rabbit: 0.8, duck: 0.85 }[art] || 0.7, k = s * K * (AD.scale || 1) * kid * (AD.size > 1.3 && !AD.scale ? 1.1 : 1) * 1.15;
+        if (ff) { const K = { cow: 0.62, sheep: 0.85, dog: 0.62, cat: 0.8, horse: 0.62, pig: 0.8, goat: 0.8, chicken: 0.85, rabbit: 0.8, duck: 0.85 }[art] || 0.7, k = s * K * (AD.scale || 1) * kid * (AD.size > 1.3 && !AD.scale ? 1.1 : 1) * 0.62;
           ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(0, -1 * sz, ff.w * k * 0.36, 2.6 * sz, 0, 0, 7); ctx.fill();
           if (an.dead) { ctx.globalAlpha = 0.75; ctx.translate(0, -ff.h * k * 0.18); ctx.rotate(Math.PI / 2); ctx.translate(ff.h * k * 0.2, ff.w * k * 0.05); }
           ctx.drawImage(ff.im, ff.x, ff.y, ff.w, ff.h, -ff.w * k / 2, -ff.h * k + 2 * k, ff.w * k, ff.h * k); }
-        else if (pf) { ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(0, -1 * sz, 9 * sz, 2.5 * sz, 0, 0, 7); ctx.fill(); if (an.dead) ctx.globalAlpha = 0.5; ctx.drawImage(pf.im, pf.x, pf.y, 32, 32, -16 * sz * 1.25, -30 * sz * 1.25, 32 * sz * 1.25, 32 * sz * 1.25); }
+        else if (pf) { ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(0, -1 * sz, 9 * sz, 2.5 * sz, 0, 0, 7); ctx.fill(); if (an.dead) ctx.globalAlpha = 0.5; ctx.drawImage(pf.im, pf.x, pf.y, 32, 32, -16 * sz * 0.7, -30 * sz * 0.7, 32 * sz * 0.7, 32 * sz * 0.7); }
         ctx.restore();
       }
-      else if (e.k === 3) this.drawPawn(ctx, e.p, s, dt);
+      else if (e.k === 3) {
+        this.drawPawn(ctx, e.p, s, dt);
+        const cr = e.p.carry; if (cr?.item && !e.p.dead && s > 0.4) { const im = itemImage(cr.item); if (im) { const [px, py] = this.worldToScreen(e.p.rx, e.p.ry), k = s * 0.5; ctx.drawImage(im, Math.round(px - 8 * k + 6 * s * (e.p.facing || 1)), Math.round(py - 44 * s), 32 * k, 32 * k); } }
+      }
       else if (e.k === 4) this.drawFire(ctx, e.x, e.ty, t.fire[e.i], s);
+      else if (e.k === 7) { const im = decorSprite(e.dd.key); if (im) { const [sx, sy] = this.worldToScreen(e.dd.x + 0.5, e.dd.y + 1), k = s * 0.62 * Math.min(1, 48 / Math.max(im.width, im.height) * 1.6); ctx.drawImage(im, Math.round(sx - im.width * k / 2), Math.round(sy - im.height * k), im.width * k, im.height * k); } }
+      else if (e.k === 6) { // an item lying on the ground
+        const d = e.d, im = itemImage(d.item); if (!im) continue;
+        const [sx, sy] = this.worldToScreen(d.x, d.y), k = s * 0.62, bob = Math.sin(this.time * 3 + d.id) * 1.2 * s;
+        ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(sx, sy, 9 * k, 3 * k, 0, 0, 7); ctx.fill();
+        ctx.drawImage(im, Math.round(sx - 16 * k), Math.round(sy - 30 * k + bob), 32 * k, 32 * k);
+        if (d.n >= 2 && T > 30) { ctx.font = `bold ${Math.max(9, 10 * s)}px system-ui`; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.strokeText(Math.round(d.n), sx + 10 * k, sy - 4 * k); ctx.fillStyle = '#fff'; ctx.fillText(Math.round(d.n), sx + 10 * k, sy - 4 * k); }
+      }
     }
     this.fx.draw(ctx, c, this.worldToScreen);
     for (const em of this.fx.emotes) { const p = w.pawns[em.pid]; if (!p || p.rx === undefined) continue; const [sx, sy] = this.worldToScreen(p.rx, p.ry); this.fx.drawEmote(ctx, em, sx, sy - 46 * s, T); }
@@ -527,20 +552,27 @@ export class Renderer {
 
   drawBuilding(ctx, b, s) {
     const w = this.world, set = w.settlements[b.sid], n = set ? w.nations[set.nationId] : null;
-    const img = buildingSprite(b.type, b.era ?? n?.era ?? 0, b.w, b.h, n?.color || '#cccccc', b.id);
+    const era = b.era ?? n?.era ?? 0;
+    const mfn = mfName(b.type, era, b.id), mf = mfSprite(mfn, n?.race || 'human'), nf = MF_FRAMES[mfn] || 1;
+    const img = mf || buildingSprite(b.type, era, b.w, b.h, n?.color || '#cccccc', b.id);
+    const fwid = mf ? mf.width / nf : img.width, fr = nf > 1 ? Math.floor(this.time * 6 + b.id) % nf : 0;
     let [sx, sy] = this.worldToScreen(b.x, b.y + b.h);
     const BS = 1.55, W0 = b.w * 32 * s;                       // buildings are drawn 55% larger than their footprint so they tower over citizens
-    const Wd = W0 * BS, Hd = (b.h * 32 + ROOF_PAD) * s * BS; sx -= (Wd - W0) / 2;
+    let Wd = W0 * BS, Hd = (b.h * 32 + ROOF_PAD) * s * BS;
+    if (mf) { const fit = FIT_NAME[mfn] ?? MF_FIT[b.type] ?? 1; Wd = W0 * BS * fit; Hd = Wd * mf.height / fwid; }
+    sx += (W0 - Wd) / 2;
     let own = false;
     if (!b.built) {
-      const prog = clamp(b.progress, 0, 1), vis = Math.floor((b.h * 32 + ROOF_PAD) * prog);
-      ctx.globalAlpha = 0.35; ctx.drawImage(img, sx, sy - Hd, Wd, Hd); ctx.globalAlpha = 1;
-      if (vis > 0) ctx.drawImage(img, 0, img.height - vis, img.width, vis, sx, sy - vis * s * BS, Wd, vis * s * BS);
-      ctx.drawImage(scaffold(b.w, b.h), sx, sy - Hd, Wd, Hd);
+      const prog = clamp(b.progress, 0, 1), vis = Math.floor(img.height * prog), k = Hd / img.height;
+      ctx.globalAlpha = 0.3; ctx.drawImage(img, 0, 0, fwid, img.height, sx, sy - Hd, Wd, Hd); ctx.globalAlpha = 1;
+      if (vis > 0) ctx.drawImage(img, 0, img.height - vis, fwid, vis, sx, sy - vis * k, Wd, vis * k);
+      ctx.drawImage(scaffold(b.w, b.h), sx + (Wd - W0 * BS) / 2, sy - (b.h * 32 + ROOF_PAD) * s * BS, W0 * BS, (b.h * 32 + ROOF_PAD) * s * BS);
+      this.drawNeeds(ctx, b, sx + Wd / 2, sy - Hd - 4 * s, s);
     } else {
-      own = this.drawGBuilding(ctx, b, sx, sy, Wd, s);
-      if (!own) ctx.drawImage(img, Math.round(sx), Math.round(sy - Hd), Wd, Hd);
-      this.drawBuildingProps(ctx, b, sx, sy, Wd, s);
+      own = !mf && this.drawGBuilding(ctx, b, sx, sy, Wd, s);
+      if (!own) ctx.drawImage(img, fr * fwid, 0, fwid, img.height, Math.round(sx), Math.round(sy - Hd), Wd, Hd);
+      if (!mf) this.drawBuildingProps(ctx, b, sx, sy, Wd, s);
+      if (b.type === 'storage' || (b.type === 'center' && set && !set.buildings.some((id) => w.buildings[id]?.type === 'storage' && w.buildings[id].built))) this.drawStock(ctx, set, sx + Wd / 2, sy + 2 * s, s);
     }
     if (!own && (b.type === 'campfire' || (b.type === 'center' && (b.era ?? 0) === 0) || (b.type === 'research' && (b.era ?? 0) === 0))) this.drawFlame(ctx, sx + Wd / 2, sy - 6 * s, s * (b.type === 'campfire' ? 1 : 1.3));
     if (b.type === 'center' && n?.flagSet !== false && n?.flag) { // flagpole with the nation's banner
@@ -551,6 +583,47 @@ export class Renderer {
     }
     if (b.built && (b.type === 'kitchen' || b.type === 'factory' || (b.type === 'workshop' && (b.era ?? 0) >= 1) || (b.era >= 6 && b.type === 'hut'))) this.drawSmoke(ctx, sx + Wd * 0.72, sy - Hd * 0.82, s * (b.type === 'factory' ? 0.8 : 0.45), b.id, b.type === 'factory' ? 'dark' : 'light', 0.55, windAt(w.atmo, b.x, b.y)[0]);
     if (set && set.until?.shield > w.time && b.type === 'center') { ctx.strokeStyle = 'rgba(127,232,240,0.35)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(sx + Wd / 2, sy, set.radius * this.cam.zoom, set.radius * this.cam.zoom * 0.6, 0, Math.PI, 0); ctx.stroke(); }
+  }
+  /** Deterministic decoration spots on a settlement's free land (client-side only, rebuilt when the town changes). */
+  settlementDecor(st) {
+    const w = this.world, t = w.tiles, n = w.nations[st.nationId], era = n?.era ?? 0, R = Math.floor(st.radius * 0.85);
+    const key = `${era}|${R}|${st.buildings.length}`;
+    if (st._decor?.key === key) return st._decor.list;
+    const pool = DECOR[decorBand(era)], list = [];
+    for (let oy = -R; oy <= R; oy++) for (let ox = -R; ox <= R; ox++) {
+      if (ox * ox + oy * oy > R * R || list.length > 36) continue;
+      const x = wrap(st.x + ox, w.W), y = st.y + oy; if (y < 1 || y >= w.H - 1) continue;
+      const hh = hash2(x * 13 + 7, y * 29 + st.id); if (hh > 0.075) continue;
+      const i = y * w.W + x; if (t.owner[i] !== st.nationId || t.feat[i] || t.bld[i] >= 0 || BIOMES[t.biome[i]].water) continue;
+      let near = false; for (let q = -1; q <= 1 && !near; q++) for (let r = -1; r <= 1; r++) { const j = (y + q) * w.W + wrap(x + r, w.W); if (t.bld[j] >= 0 || t.feat[j] === F.FARM) { near = true; break; } }
+      if (near) continue;
+      list.push({ x, y, key: pool[Math.floor(hash2(x, y) * pool.length)] });
+    }
+    st._decor = { key, list }; return list;
+  }
+  /** Materials a construction site still waits for: little icons with counts above the scaffold. */
+  drawNeeds(ctx, b, cx, y, s) {
+    const left = remainingCost(b), keys = Object.keys(left); if (!keys.length || s < 0.5) return;
+    const k = Math.max(0.5, s * 0.55), cw = 30 * k;
+    let x = cx - (keys.length * cw) / 2;
+    ctx.fillStyle = 'rgba(16,18,34,0.72)'; ctx.beginPath(); ctx.roundRect?.(x - 3, y - 22 * k, keys.length * cw + 6, 24 * k, 6); ctx.fill();
+    ctx.font = `bold ${Math.round(11 * k)}px system-ui`; ctx.textAlign = 'left';
+    for (const r of keys) {
+      const im = itemImage(CAT_DEFAULT[r]); if (im) ctx.drawImage(im, x, y - 20 * k, 18 * k, 18 * k);
+      ctx.fillStyle = '#ffd34d'; ctx.fillText(left[r], x + 17 * k, y - 6 * k); x += cw;
+    }
+  }
+  /** The goods in a settlement's store, piled up in front of the storehouse so you can see what you have. */
+  drawStock(ctx, set, cx, y, s) {
+    if (!set || s < 0.45) return;
+    const items = topItems(set, 6); if (!items.length) return;
+    const k = s * 0.55, cols = 3;
+    items.forEach(([id, v], i) => {
+      const im = itemImage(id); if (!im) return;
+      const col = i % cols, row = Math.floor(i / cols), x = cx + (col - 1) * 20 * k * 1.3, yy = y - row * 15 * k;
+      const stack = Math.min(3, 1 + Math.floor(v / 25));
+      for (let q = 0; q < stack; q++) ctx.drawImage(im, Math.round(x - 12 * k + q * 2 * k), Math.round(yy - 22 * k - q * 5 * k), 24 * k, 24 * k);
+    });
   }
   /** Tents and campfires from the Gandalf pack replace the procedural early-era buildings. Returns true when it drew the whole building. */
   drawGBuilding(ctx, b, sx, sy, Wd, s) {
@@ -683,7 +756,7 @@ export class Renderer {
     const st = p.state, moving = this.time - (p._moving || 0) < 0.15;
     const dir = sh.pack ? (p._dir ?? DIR.FRONT) : 0;
     let f = 0;
-    const at = this.time * 8 + (p.id % 7);
+    const at = this.atime * 8 + (p.id % 7);
     if (st === 'fight' || p.attackAnim > 0) f = 8 + (Math.floor(at * 0.8) % 2);
     else if (st === 'work') f = 6 + (Math.floor(at * 0.7) % 2);
     else if (moving || st === 'walk') f = 2 + (Math.floor(at) % 4);
@@ -717,6 +790,7 @@ export class Renderer {
     ctx.restore();
     // indicators
     const headY = sy - (footY - topY) * S;
+    p._hb = lying ? [sx - 18 * S, sy - 14 * S, sx + 18 * S, sy + 3 * S, this.rtime] : [sx - 11 * S, headY - 2 * S, sx + 11 * S, sy + 3 * S, this.rtime]; // click box = drawn sprite
     if (p.brk) { ctx.fillStyle = '#ff5a5a'; ctx.font = `bold ${Math.max(10, 10 * s)}px system-ui`; ctx.textAlign = 'center'; ctx.fillText('!', sx, headY - 4); }
     const pinned = this.pins.has(p.id), selected = this.selection?.type === 'pawn' && this.selection.id === p.id;
     if ((p.hp < 92 || p.blood < 0.95) && !p.dead && (st === 'fight' || p.downed || selected)) { const hpw = 18 * s; ctx.fillStyle = '#1a1420'; ctx.fillRect(sx - hpw / 2, headY - 6, hpw, 3); ctx.fillStyle = p.hp > 50 ? '#62c46a' : '#e8484d'; ctx.fillRect(sx - hpw / 2, headY - 6, hpw * clamp(p.hp / 100, 0, 1), 3); }
@@ -819,6 +893,13 @@ export class Renderer {
       const g = this.ghost, [sx, sy] = this.worldToScreen(g.x, g.y);
       ctx.fillStyle = g.ok ? 'rgba(98,196,106,0.35)' : 'rgba(232,72,77,0.35)'; ctx.fillRect(sx, sy, g.w * T, g.h * T);
       ctx.strokeStyle = g.ok ? '#62c46a' : '#e8484d'; ctx.lineWidth = 2; ctx.strokeRect(sx, sy, g.w * T, g.h * T);
+      if (g.cost) { // what it will take: icons with need / have, red when the stores are short
+        const keys = Object.keys(g.cost), k = 0.8, cw = 52 * k; let x = sx + g.w * T / 2 - (Math.max(1, keys.length) * cw) / 2; const y = sy - 10;
+        ctx.fillStyle = 'rgba(16,18,34,0.82)'; ctx.beginPath(); ctx.roundRect?.(x - 6, y - 26, Math.max(1, keys.length) * cw + 12, 28, 8); ctx.fill();
+        ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'left';
+        if (!keys.length) { ctx.fillStyle = '#9fe6a0'; ctx.fillText('Free', x + 4, y - 8); }
+        for (const r of keys) { const im = itemImage(CAT_DEFAULT[r]); if (im) ctx.drawImage(im, x, y - 24, 20, 20); const have = Math.floor(g.stock?.[r] || 0); ctx.fillStyle = have >= g.cost[r] ? '#9fe6a0' : '#ff8a80'; ctx.fillText(`${g.cost[r]}`, x + 22, y - 8); x += cw; }
+      }
     }
     if (this.powerPreview) { const pp = this.powerPreview, [sx, sy] = this.worldToScreen(pp.x, pp.y); const col = pp.ok ? (this.brush?.color || '#ffd34d') : '#e8484d', rr = Math.max(0.6, pp.r) * T; ctx.save(); ctx.fillStyle = col; ctx.globalAlpha = 0.12 + 0.05 * Math.sin(this.time * 4); ctx.beginPath(); ctx.ellipse(sx, sy, rr, rr * 0.7, 0, 0, 7); ctx.fill(); ctx.globalAlpha = 0.9; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.lineDashOffset = -this.time * 12; ctx.beginPath(); ctx.ellipse(sx, sy, rr, rr * 0.7, 0, 0, 7); ctx.stroke(); ctx.restore(); }
     // settlement names when zoomed out a bit
@@ -994,8 +1075,10 @@ export class Renderer {
       let best = null, bd = 1e9;
       for (const p of Object.values(w.pawns)) {
         if (p.rx === undefined) continue;
+        const hb = p._hb && this.rtime - p._hb[4] < 0.5 ? p._hb : null;
+        if (hb) { if (sx >= hb[0] && sx <= hb[2] && sy >= hb[1] && sy <= hb[3]) { const cx = (hb[0] + hb[2]) / 2, cy = (hb[1] + hb[3]) / 2, d = Math.abs(sx - cx) + Math.abs(sy - cy) * 0.5 - (p.ry || 0) * 0.01; if (d < bd) { bd = d; best = p; } } continue; }
         const [px, py] = this.worldToScreen(p.rx, p.ry);
-        if (sx > px - 9 * s && sx < px + 9 * s && sy > py - 40 * s && sy < py + 2 * s) { const d = Math.abs(sx - px) + Math.abs(sy - py + 18 * s); if (d < bd) { bd = d; best = p; } }
+        if (sx > px - 11 * s && sx < px + 11 * s && sy > py - 56 * s && sy < py + 3 * s) { const d = Math.abs(sx - px) + Math.abs(sy - py + 26 * s); if (d < bd) { bd = d; best = p; } }
       }
       if (best) return { type: 'pawn', id: best.id };
       const ti = Math.floor(y) * w.W + wrap(Math.floor(x), w.W);

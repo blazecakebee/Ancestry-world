@@ -1,26 +1,30 @@
 // World state: creation, lookups, territory, building placement, spatial hashing.
 import { RNG } from '../core/rng.js';
 import { initCreed } from './creed.js';
+import { initTechs } from './tech.js';
 import { generateWorld, findStartSites, tileLatLon } from '../world/worldgen.js';
 import { createAtmosphere } from '../world/atmosphere.js';
 import { BIOMES, F, B, isWater } from '../data/biomes.js';
-import { BUILDINGS } from '../data/buildings.js';
-import { createPawn } from './pawn.js';
+import { BUILDINGS, buildCost } from '../data/buildings.js';
+import { createPawn, computeFx } from './pawn.js';
 import { nationName, settlementName, LANG_COUNT, NATION_COLORS } from '../data/names.js';
 import { wrap, dist } from '../core/util.js';
 import { RACES, RACE_IDS } from '../data/races.js';
 
-export const YEAR_LEN = 12; // days per year (4 seasons x 3 days)
+// Time: world.time is counted in sim units (one unit = DAY_SECONDS real seconds at 1x). A calendar day (one sunrise to the
+// next) lasts DAY_LEN units, so people get several hours of useful work between nights. A year is 12 calendar days.
+import { DAY_LEN, YEAR_LEN } from '../core/time.js';
+export { DAY_LEN, YEAR_LEN };
 export const DAY_SECONDS = 30; // real seconds per in-game day at 1x speed
 
 export function createWorld({ seed, name = 'New Globe', W, H, aiNations = 5, players = [], founders = 2 } = {}) {
   seed = seed >>> 0 || ((Math.random() * 2 ** 31) | 0);
   const tiles = generateWorld(seed, W, H);
   const world = {
-    version: 1, name, seed, W: tiles.W, H: tiles.H, time: 2.3, yearLen: YEAR_LEN, tick: 0, speed: 1, paused: false,
+    version: 1, name, seed, W: tiles.W, H: tiles.H, time: DAY_LEN * 0.3, yearLen: YEAR_LEN, tick: 0, speed: 1, paused: false,
     tiles, atmo: createAtmosphere(tiles),
     nations: {}, settlements: {}, buildings: {}, pawns: {}, animals: {}, corpses: [],
-    nextId: { nation: 1, settlement: 1, building: 1, animal: 1, event: 1 },
+    nextId: { nation: 1, settlement: 1, building: 1, animal: 1, event: 1, drop: 1 }, drops: {},
     players: {}, waterActive: new Set(), fireActive: new Set(), dirty: new Set(),
     age: { id: 'hope', start: 0, until: YEAR_LEN * 3 }, space: [], log: [], fx: [], rng: new RNG(seed ^ 0x51f0),
     hot: new Set(), cameraHints: {}, settings: { founders },
@@ -71,6 +75,7 @@ export function foundNation(world, site, { ai = true, ownerId = null, name, colo
   for (const [k, v] of Object.entries(RACES[race].ideo)) n.ideology[k] = Math.max(-100, Math.min(100, n.ideology[k] + v));
   world.nations[id] = n;
   initCreed(world, n, rng);
+  initTechs(n);
   const s = foundSettlement(world, n, site.x, site.y, true);
   // starting tribe
   const [lat] = tileLatLon(site.x, site.y, world.W, world.H);
@@ -80,6 +85,8 @@ export function foundNation(world, site, { ai = true, ownerId = null, name, colo
     const p = createPawn(rng, { lang, race, nationId: id, settlementId: s.id, x: site.x + rng.range(-2, 2), y: site.y + rng.range(-2, 2), age: pop <= 2 ? rng.range(19, 26) : k < 2 ? rng.range(30, 45) : k < 7 ? rng.range(18, 34) : rng.range(6, 14), region, sex: k < 6 || pop <= 2 ? (k % 2 ? 'f' : 'm') : undefined, era: 0 });
     world.pawns[p.id] = p; fam.push(p);
   }
+  // founders can always have children: a two-person start must never be a dead end
+  for (const p of fam) if (p.age >= 16 && p.traits.includes('infertile')) { p.traits = p.traits.filter((t) => t !== 'infertile'); computeFx(p); }
   // pair up a few couples
   const men = fam.filter((p) => p.sex === 'm' && p.age > 18), women = fam.filter((p) => p.sex === 'f' && p.age > 18);
   for (let k = 0; k < Math.min(men.length, women.length, 3); k++) { men[k].spouse = women[k].id; women[k].spouse = men[k].id; men[k].rel[women[k].id] = 70; women[k].rel[men[k].id] = 70; women[k].family = men[k].family; }
@@ -98,6 +105,7 @@ export function foundSettlement(world, nation, x, y, capital = false) {
   const id = world.nextId.settlement++;
   const s = { id, nationId: nation.id, name: settlementName(rng, nation.lang), x: Math.floor(x), y: Math.floor(y), founded: world.time,
     stock: { food: 70, meals: 15, rations: 0, wood: 30, stone: 6, metal: 0, cloth: 6, medicine: 4 },
+    items: { berries: 40, beef: 30, meal: 15, wood: 30, stone: 6, hide: 6, medicine: 4 },
     radius: 7, plans: [], buildings: [], until: {}, pollution: 0, pop: 0, capital, lastPlan: 0, mood: 50 };
   world.settlements[id] = s;
   if (capital) nation.capitalId = id;
@@ -141,7 +149,8 @@ export function placeBuilding(world, s, type, x0, y0, force = false) {
   if (!force && !canPlace(world, s, type, x0, y0)) return null;
   const t = world.tiles, def = BUILDINGS[type], { W } = world;
   const id = world.nextId.building++;
-  const b = { id, type, x: wrap(x0, W), y: y0, w: def.w, h: def.h, sid: s.id, progress: 0, built: false, hp: def.hp, paid: false, era: world.nations[s.nationId].era };
+  const b = { id, type, x: wrap(x0, W), y: y0, w: def.w, h: def.h, sid: s.id, progress: 0, built: false, hp: def.hp, paid: false, era: world.nations[s.nationId].era, have: {} };
+  b.need = buildCost(def, b.era); if (!Object.keys(b.need).length) b.paid = true;
   world.buildings[id] = b; s.buildings.push(id);
   for (let oy = 0; oy < def.h; oy++) for (let ox = 0; ox < def.w; ox++) {
     const i = (y0 + oy) * W + wrap(x0 + ox, W);
@@ -223,8 +232,8 @@ export function emitFx(world, fx) { world.fx.push({ ...fx, t: world.time }); }
 
 export function dateString(time, yearLen = YEAR_LEN) {
   const year = Math.floor(time / yearLen) + 1;
-  const doy = time % yearLen;
-  const season = ['Spring', 'Summer', 'Autumn', 'Winter'][Math.floor(doy / (yearLen / 4))];
-  const day = Math.floor(doy % (yearLen / 4)) + 1;
-  return { year, season, day, hour: Math.floor((time % 1) * 24) };
+  const days = time / DAY_LEN, perYear = yearLen / DAY_LEN, doy = days % perYear;
+  const season = ['Spring', 'Summer', 'Autumn', 'Winter'][Math.floor(doy / (perYear / 4))];
+  const day = Math.floor(doy % (perYear / 4)) + 1;
+  return { year, season, day, hour: Math.floor((days % 1) * 24), minute: Math.floor(((days * 24) % 1) * 60) };
 }

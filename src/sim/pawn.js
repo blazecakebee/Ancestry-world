@@ -4,6 +4,7 @@ import { SKILLS, THOUGHTS, PASSION_XP, SKILL_XP_PER_LEVEL } from '../data/societ
 import { personName, familyName } from '../data/names.js';
 import { clamp } from '../core/util.js';
 import { RACES } from '../data/races.js';
+import { DAY_LEN } from '../core/time.js';
 
 export const SKIN_TONES = 10, HAIR_COLORS = 11, EYE_COLORS = 6;
 export const HAIR_STYLES_M = [0, 1, 2, 3, 4, 9, 10, 2, 3, 13];
@@ -110,8 +111,9 @@ export function addThought(p, id, now, mult = 1) {
   const d = THOUGHTS[id]; if (!d) return;
   if (p.traits.includes('psychopath') && (id === 'friendDied' || id === 'sawDeath' || id === 'familyDied')) return;
   const existing = p.thoughts.filter((t) => t.id === id);
-  if (existing.length >= (d.stack || 1)) { existing[0].until = now + d.days; return; }
-  p.thoughts.push({ id, until: now + d.days, m: mult });
+  const span = d.days * DAY_LEN; // memories last calendar days
+  if (existing.length >= (d.stack || 1)) { existing[0].until = now + span; return; }
+  p.thoughts.push({ id, until: now + span, m: mult });
 }
 export function setSituational(p, id, on, now) {
   const i = p.thoughts.findIndex((t) => t.id === id);

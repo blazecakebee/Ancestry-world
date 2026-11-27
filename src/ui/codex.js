@@ -9,6 +9,7 @@ import { RACES } from '../data/races.js';
 import { BIOMES } from '../data/biomes.js';
 import { WORLD_AGES } from '../sim/events.js';
 import { LORE } from '../data/lore.js';
+import { fmtSpan } from '../core/time.js';
 import { MEMES, PRECEPTS, RITUALS } from '../data/creed.js';
 import { LPC_CREDIT } from '../render/lpc.js';
 import { GCHAR_CREDIT } from '../render/gchar.js';
@@ -58,7 +59,7 @@ export function showCodex(tab = 'lore') {
         if (!list.length) continue;
         add(out, h('h4', { class: 'cx-sub' }, `Tier ${T.tier} · ${T.name}`, h('span', { class: 'muted small' }, T.devotion ? ` — needs ${T.devotion} devotion` : ' — from the start')),
           h('div', { class: 'cx-grid' }, list.map((p) => card(iconImg(p.icon, 2), p.name, `✦ ${p.cost}`, h('div', {}, h('p', { class: 'small' }, p.desc),
-            pills([[null, cap(p.cat)], [null, `${p.cd}d rest`], [null, p.target === 'tile' ? `brush ${p.radius}` : p.target], p.minEra ? [null, `era ${p.minEra}+`] : null])), { color: p.color }))));
+            pills([[null, cap(p.cat)], [null, `${fmtSpan(p.cd)} rest`], [null, p.target === 'tile' ? `brush ${p.radius}` : p.target], p.minEra ? [null, `era ${p.minEra}+`] : null])), { color: p.color }))));
       }
       if (out.querySelectorAll('.cx-card').length === 0) add(out, h('p', { class: 'muted' }, 'No powers match.'));
       return out;
@@ -115,7 +116,7 @@ export function showCodex(tab = 'lore') {
     credits() {
       return add(h('div', { class: 'col' }), head('info', 'Credits'), h('div', { class: 'cx-intro' },
         h('p', {}, LPC_CREDIT), h('p', {}, GCHAR_CREDIT),
-        h('p', {}, 'Farm animals and crops: "Modern Farm" by LimeZu (limezu.itch.io). Moon & planet shading: PixelPlanets by Deep-Fold (MIT, deep-fold.itch.io).'),
+        h('p', {}, 'Farm animals, crops, farm buildings and item icons: "Modern Farm" by LimeZu. Town buildings, statues, fountains and street furniture: "Modern Exteriors" by LimeZu (limezu.itch.io). Civilization Book and paper menus: "Paper UI System" by Humble Gift. Moon & planet shading: PixelPlanets by Deep-Fold (MIT, deep-fold.itch.io).'),
         h('p', {}, 'Music: "8 Bit Videogame Music No Copyright" by Lofi Elephant — youtube.com/@lofielephant (free to use with attribution).'),
         h('p', { class: 'small muted' }, 'Full author list: assets/packs/lpc/AUTHORS.txt. Terrain, buildings, animals, icons, effects, music and sound are procedurally generated.')));
     },
@@ -130,5 +131,5 @@ export function showCodex(tab = 'lore') {
   };
   const right = h('div', { class: 'cx-right' }, search, pane);
   draw();
-  modal('Codex', h('div', { class: 'cx' }, nav, right), { icon: iconImg('book'), width: 'min(1040px, 95vw)' });
+  modal('Codex', h('div', { class: 'cx' }, nav, right), { icon: iconImg('book'), width: 'min(1040px, 95vw)' }).el.classList.add('book-modal');
 }

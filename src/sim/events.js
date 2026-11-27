@@ -171,11 +171,11 @@ export function fireEvent(world, id, n, s, rng) {
     }
     case 'raiders': return spawnRaiders(world, n, s, rng);
     case 'manhunters': {
-      const kind = rng.pick(['wolf', 'bear', 'boar']);
+      const kind = rng.pick(['dog', 'fox', 'pig']);
       const cnt = Math.min(8, 2 + Math.floor(pawns.length / 6));
       const target = rng.pick(pawns); if (!target) return;
       for (let k = 0; k < cnt; k++) { const id = world.nextId.animal++; world.animals[id] = { id, kind, x: s.x + s.radius + 6 + rng.range(-2, 2), y: s.y + rng.range(-3, 3), hp: ANIMALS[kind].hp, facing: -1, t: 0, angry: rng.pick(pawns).id }; }
-      return L('bad', `A pack of ${cnt} maddened ${{ wolf: 'wolves', bear: 'bears', boar: 'boars' }[kind]} is attacking ${s.name}!`, { severity: 'major' });
+      return L('bad', `A pack of ${cnt} maddened ${{ dog: 'feral dogs', fox: 'rabid foxes', pig: 'wild hogs' }[kind]} is attacking ${s.name}!`, { severity: 'major' });
     }
     case 'smog': s.pollution = Math.min(255, s.pollution + 80); return L('bad', `Choking smog blankets ${s.name}.`);
     case 'strike': for (const p of pawns.filter((p) => p.mood < 50)) { p.brk = { type: 'sadWander', lvl: 'minor', until: world.time + 0.6 }; } return L('bad', `Workers in ${s.name} have gone on strike!`);

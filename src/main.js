@@ -17,7 +17,7 @@ import { canPlace } from './sim/world.js';
 import { Session } from './net/session.js';
 import { serializeWorld, deserializeWorld } from './net/serialize.js';
 import { powerById } from './data/powers.js';
-import { BUILDINGS } from './data/buildings.js';
+import { BUILDINGS, buildCost, buildingName } from './data/buildings.js';
 import { RACES } from './data/races.js';
 import { ERAS } from './data/eras.js';
 import { NATION_COLORS } from './data/names.js';
@@ -364,6 +364,7 @@ class App {
         case 'toolBuild': return this.hud.openBuildMenu();
         case 'toolPowers': return this.armPower('rain');
         case 'nation': return this.session.myNation && this.hud.openNation(this.session.myNation.id);
+        case 'research': return this.session.myNation && this.hud.openNation(this.session.myNation.id, 'research');
         case 'codex': return showCodex();
         case 'settings': return showSettings(this);
         case 'chat': e.preventDefault(); return this.hud.focusChat();
@@ -389,7 +390,8 @@ class App {
     if (this.tool === 'build' && this.buildType) {
       const def = BUILDINGS[this.buildType], x0 = Math.floor(x - def.w / 2 + 0.5), y0 = Math.floor(y - def.h / 2 + 0.5);
       const s = this.nearestOwnSettlement(x, y);
-      r.ghost = { x: x0, y: y0, w: def.w, h: def.h, ok: !!s && canPlace(w, s, this.buildType, x0, y0) && dist(x, y, s.x, s.y, w.W) <= s.radius + 4 };
+      const n = s ? w.nations[s.nationId] : this.session.myNation;
+      r.ghost = { x: x0, y: y0, w: def.w, h: def.h, ok: !!s && canPlace(w, s, this.buildType, x0, y0) && dist(x, y, s.x, s.y, w.W) <= s.radius + 4, type: this.buildType, cost: buildCost(def, n?.era || 0), stock: s?.stock };
     }
     if (this.tool === 'power' && this.armed) {
       const P = powerById[this.armed]; const own = w.tiles.owner[Math.floor(clamp(y, 0, w.H - 1)) * w.W + Math.floor(wrap(x, w.W))];
@@ -446,7 +448,7 @@ class App {
 
   // ---------- loop ----------
   loop(t) {
-    const rawDt = Math.min(0.1, (t - this.last) / 1000);
+    const realDt = Math.min(0.25, (t - this.last) / 1000), rawDt = Math.min(0.1, realDt); // sim keeps up through slow frames; visuals stay smooth
     const hidden = document.hidden || !document.hasFocus();
     if (hidden && t - this.last < 1000 / this.settings.bgFps) { requestAnimationFrame((tt) => this.loop(tt)); return; }
     this.last = t;
@@ -476,7 +478,7 @@ class App {
         if (this.follow) { const p = w.pawns[this.follow]; if (p) { r.cam.x = p.rx ?? p.x; r.cam.y = p.ry ?? p.y; } else this.follow = null; }
       }
       s.camera(r.cam.x, r.cam.y, r.cam.zoom);
-      s.update(rawDt);
+      s.update(realDt);
       r.frame(rawDt, s);
       if (t - (this._hudT || 0) > 250) { this._hudT = t; this.hud?.update(); this.updateModeChip(); this.ambient(); }
       this.tickAutosave(rawDt);

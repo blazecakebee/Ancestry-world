@@ -2,6 +2,7 @@
 import { generateWorld } from '../world/worldgen.js';
 import { createAtmosphere } from '../world/atmosphere.js';
 import { RNG } from '../core/rng.js';
+import { YEAR_LEN } from '../core/time.js';
 import { setNextPawnId, getNextPawnId } from '../sim/pawn.js';
 
 const TILE_ARRAYS = ['height', 'biome', 'feat', 'featHp', 'river', 'owner', 'bld', 'crop', 'water', 'burnt', 'fire', 'pollution'];
@@ -35,7 +36,7 @@ export function serializeWorld(world) {
     settings: world.settings || {}, hostId: world.hostId, rngState: world.rng.s,
     tiles: Object.fromEntries(TILE_ARRAYS.map((k) => [k, b64(t[k])])),
     atmo: { ...Object.fromEntries(ATMO_ARRAYS.map((k) => [k, b64(a[k])])), vortices: a.vortices, overrides: a.overrides },
-    waterActive: [...world.waterActive], fireActive: [...world.fireActive],
+    waterActive: [...world.waterActive], fireActive: [...world.fireActive], drops: world.drops || {},
   };
 }
 
@@ -50,10 +51,10 @@ export function deserializeWorld(s) {
   atmo.vortices = s.atmo.vortices || []; atmo.overrides = s.atmo.overrides || [];
   setNextPawnId(m.nextPawnId || 1 + Math.max(0, ...Object.keys(s.pawns).map(Number)));
   const world = {
-    version: 1, name: m.name, seed: m.seed, W: m.W, H: m.H, time: m.time, yearLen: 12, tick: 0, speed: m.speed || 1, paused: false,
+    version: 1, name: m.name, seed: m.seed, W: m.W, H: m.H, time: m.time, yearLen: YEAR_LEN, tick: 0, speed: m.speed || 1, paused: false,
     tiles, atmo, nations: s.nations, settlements: s.settlements, buildings: s.buildings, pawns: s.pawns, animals: s.animals || {}, squads: s.squads || {},
     nextId: s.nextId, players: s.players || {}, age: s.age, space: s.space || [], log: s.log || [], fx: [], rng: new RNG(s.rngState || m.seed),
-    waterActive: new Set(s.waterActive || []), fireActive: new Set(s.fireActive || []), dirty: new Set(), hot: new Set(), cameraHints: {},
+    waterActive: new Set(s.waterActive || []), fireActive: new Set(s.fireActive || []), dirty: new Set(), hot: new Set(), cameraHints: {}, drops: s.drops || {},
     settings: s.settings || {}, hostId: s.hostId, raiderNationId: s.raiderNationId, freeSites: [],
   };
   for (const n of Object.values(world.nations)) { n.proposals = n.proposals || []; n.perms = n.perms || {}; }
@@ -63,12 +64,12 @@ export function deserializeWorld(s) {
 // ---------------- network snapshots ----------------
 const STATE_CODE = { idle: 0, walk: 1, work: 2, fight: 3, sleep: 4, eat: 5, downed: 6, dead: 7, break: 8 };
 const STATE_NAME = Object.fromEntries(Object.entries(STATE_CODE).map(([k, v]) => [v, k]));
-export const CARD_KEYS = ['id', 'name', 'family', 'sex', 'race', 'age', 'look', 'nationId', 'settlementId', 'role', 'gearEra', 'traits', 'mood', 'possessedBy', 'parents', 'children', 'spouse', 'lover', 'lifespan', 'deathCause'];
+export const CARD_KEYS = ['id', 'name', 'family', 'sex', 'race', 'age', 'look', 'nationId', 'settlementId', 'role', 'gearEra', 'traits', 'mood', 'possessedBy', 'parents', 'children', 'spouse', 'lover', 'lifespan', 'deathCause', 'dressed', 'work'];
 
 export function pawnCard(p) { const c = {}; for (const k of CARD_KEYS) c[k] = p[k]; c.fx = p.fx; return c; }
 export function pawnFast(p) {
   const flags = (p.downed ? 1 : 0) | (p.dead ? 2 : 0) | (p.attackAnim > 0 ? 4 : 0) | (p.brk ? 8 : 0) | (p.possessedBy ? 16 : 0) | (p.facing < 0 ? 32 : 0);
-  return [p.id, Math.round(p.x * 100), Math.round(p.y * 100), STATE_CODE[p.state] ?? 0, flags, Math.round(p.hp), Math.round(p.mood)];
+  return [p.id, Math.round(p.x * 100), Math.round(p.y * 100), STATE_CODE[p.state] ?? 0, flags, Math.round(p.hp), Math.round(p.mood), p.carry?.item || 0, p.work || 0];
 }
 export function pawnDetail(p) { return strip({ ...p, path: null }); }
 export function tileRecord(t, i) { return [i, t.biome[i], t.feat[i], t.featHp[i], t.owner[i], t.bld[i], t.crop[i], t.fire[i], Math.round(t.water[i] * 100), t.burnt[i], Math.round(t.height[i] * 1000), t.river[i], t.pollution[i]]; }
@@ -93,6 +94,7 @@ export function applyFast(world, arr) {
     const p = world.pawns[r[0]]; if (!p) continue;
     seen.add(r[0]);
     p.x = r[1] / 100; p.y = r[2] / 100; p.state = STATE_NAME[r[3]] || 'idle';
+    p.carry = r[7] ? { item: r[7] } : null; if (r[8]) p.work = r[8];
     p.downed = !!(r[4] & 1); p.dead = !!(r[4] & 2); p.attackAnim = r[4] & 4 ? 1 : 0; p.brk = r[4] & 8 ? (p.brk || { type: 'sadWander' }) : null; p.facing = r[4] & 32 ? -1 : 1;
     p.hp = r[5]; p.mood = r[6];
   }

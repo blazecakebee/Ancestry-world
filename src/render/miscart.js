@@ -69,7 +69,15 @@ const PAT = {
 const needsC3 = (p) => p === 'tricolorV' || p === 'tricolorH';
 /** Draw a flag at pixel size W x H (24x16 native). wave: 0..1 animation phase (0 = flat).
  *  flag: pattern, c1, c2, c3, emblem, ec; optional ep (position), es (size), eo (outline), em (mirror pattern) */
+/** A flag canvas. The cached original is shared; whenever it is already shown somewhere in the page we hand out a copy,
+ *  otherwise the same element would hop between menus every refresh (the "flickering flag" bug). */
 export function flagCanvas(flag, W = 24, H = 16, wave = 0) {
+  const c = flagCanvas0(flag, W, H, wave);
+  if (!c.parentNode) return c;
+  const d = document.createElement('canvas'); d.width = c.width; d.height = c.height; d.getContext('2d').drawImage(c, 0, 0);
+  d.style.cssText = c.style.cssText; d.className = c.className; return d;
+}
+function flagCanvas0(flag, W, H, wave) {
   if (!flag) flag = { pattern: 'solid', c1: '#888888', c2: '#444444', c3: '#ffffff', emblem: 'none', ec: '#ffffff' };
   const key = `fl${JSON.stringify(flag)}|${W}|${H}|${Math.round(wave * 4)}`;
   return memo(key, () => {

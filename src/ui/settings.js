@@ -19,7 +19,7 @@ export const ACTIONS = {
   ovTrade: { label: 'Overlay: trade routes', group: 'Overlays' }, ovWeather: { label: 'Overlay: weather', group: 'Overlays' }, ovWind: { label: 'Overlay: wind', group: 'Overlays' },
   ovTemp: { label: 'Overlay: temperature', group: 'Overlays' }, ovPressure: { label: 'Overlay: pressure', group: 'Overlays' }, ovHumidity: { label: 'Overlay: humidity', group: 'Overlays' }, ovRace: { label: 'Overlay: races', group: 'Overlays' },
   toolInspect: { label: 'Tool: inspect', group: 'Tools' }, toolPowers: { label: 'Open powers', group: 'Tools' }, toolBuild: { label: 'Tool: plan building', group: 'Tools' },
-  nation: { label: 'Nation window', group: 'Windows' }, codex: { label: 'Codex', group: 'Windows' }, chat: { label: 'Chat', group: 'Windows' }, settings: { label: 'Settings', group: 'Windows' },
+  nation: { label: 'Nation window', group: 'Windows' }, research: { label: 'Research tree', group: 'Windows' }, codex: { label: 'Codex', group: 'Windows' }, chat: { label: 'Chat', group: 'Windows' }, settings: { label: 'Settings', group: 'Windows' },
   release: { label: 'Release possessed citizen', group: 'Possession' }, possessAttack: { label: 'Possessed: act / attack', group: 'Possession' },
   pinSelected: { label: 'Pin / unpin selected citizen', group: 'Tools' }, cancel: { label: 'Cancel / close', group: 'Tools' },
 };
@@ -27,7 +27,7 @@ export const DEFAULT_KEYS = {
   pause: 'Space', speed1: 'Digit1', speed2: 'Digit2', speed3: 'Digit3', speed4: 'Digit4', speed5: 'Digit5',
   panUp: 'KeyW', panDown: 'KeyS', panLeft: 'KeyA', panRight: 'KeyD', zoomIn: 'Equal', zoomOut: 'Minus', home: 'KeyH',
   ovBorders: 'F1', ovIdeology: 'F2', ovGlitter: 'F3', ovTrade: 'F4', ovWeather: 'F5', ovWind: 'F6', ovTemp: 'F7', ovPressure: 'F8', ovHumidity: 'F9', ovRace: 'F10',
-  toolInspect: 'KeyQ', toolPowers: 'KeyG', toolBuild: 'KeyB', nation: 'KeyN', codex: 'KeyC', chat: 'Enter', settings: 'KeyO',
+  toolInspect: 'KeyQ', toolPowers: 'KeyG', toolBuild: 'KeyB', nation: 'KeyN', research: 'KeyT', codex: 'KeyC', chat: 'Enter', settings: 'KeyO',
   release: 'KeyR', possessAttack: 'KeyF', pinSelected: 'KeyP', cancel: 'Escape',
 };
 

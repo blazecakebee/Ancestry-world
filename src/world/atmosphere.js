@@ -6,6 +6,7 @@
 //  - Saturated air condenses into cloud and precipitation; mountains force uplift (orographic rain).
 //  - Emergent storms: thunderstorms, tropical cyclones (rotating vortices), blizzards, dust storms.
 import { clamp, wrap } from '../core/util.js';
+import { DAY_LEN } from '../core/time.js';
 import { BIOMES, B } from '../data/biomes.js';
 
 export const STORM = { NONE: 0, RAIN: 1, THUNDER: 2, CYCLONE: 3, BLIZZARD: 4, DUST: 5, SNOW: 6 };
@@ -43,7 +44,7 @@ export function createAtmosphere(tiles) {
 export function sunPosition(time, yearLen) {
   const yearFrac = (time / yearLen) % 1;
   const decl = 0.41 * Math.sin(2 * Math.PI * (yearFrac - 0.25)); // ~23.4 degrees
-  const lon = Math.PI - 2 * Math.PI * (time % 1); // noon sweeps westward
+  const lon = Math.PI - 2 * Math.PI * ((time / DAY_LEN) % 1); // noon sweeps westward
   return { lat: decl, lon: ((lon + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI };
 }
 

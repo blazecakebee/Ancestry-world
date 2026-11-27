@@ -13,6 +13,7 @@ import { stepStoryteller, stepWorldAge, handleWorldEvents } from './events.js';
 import { applyCommand, refreshBuffs } from './commands.js';
 import { buildSpatial, logEvent, emitFx, pawnsNear, DAY_SECONDS } from './world.js';
 import { pawnAttack } from './combat.js';
+import { stepDrops } from './items.js';
 import { dist, wrap } from '../core/util.js';
 import { BIOMES, F } from '../data/biomes.js';
 import { nationMults } from './nation.js';
@@ -33,7 +34,8 @@ export class Game {
     if (w.paused) return 0;
     this.acc += (realDt * w.speed) / DAY_SECONDS;
     let n = 0;
-    while (this.acc >= TICK && n < budgetTicks) { this.step(TICK); this.acc -= TICK; n++; }
+    const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
+    while (this.acc >= TICK && n < budgetTicks) { this.step(TICK); this.acc -= TICK; n++; if (t0 && (n & 3) === 0 && performance.now() - t0 > 40) break; } // never freeze a frame
     if (this.acc > TICK * budgetTicks) this.acc = 0; // drop backlog if the machine can't keep up
     return n;
   }
@@ -102,6 +104,7 @@ export class Game {
       const rid = w.raiderNationId;
       if (!Object.values(w.pawns).some((p) => p.nationId === rid && !p.dead)) for (const n of Object.values(w.nations)) if (n.relations[rid]?.state === 'war') n.relations[rid].state = 'peace';
     }
+    if (tick % 30 === 0) stepDrops(w);
     handleWorldEvents(w, events, rng);
     if (w.fx.length > 400) w.fx.splice(0, w.fx.length - 400);
   }

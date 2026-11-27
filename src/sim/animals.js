@@ -4,6 +4,8 @@ import { tileCost } from './pathfind.js';
 import { pawnsNear, emitFx } from './world.js';
 import { wrap, dist, dx } from '../core/util.js';
 import { CHUNK } from '../world/physics.js';
+import { ANIMAL_DROPS } from '../data/items.js';
+import { dropItem } from './items.js';
 
 // ---- wildlife population ----
 const CELL = 8;                       // spatial cell (tiles) used for mate and crowding checks
@@ -19,7 +21,7 @@ function landCount(world) {
   return (world._land = n);
 }
 /** How many wild animals the planet should hold (about one herd per ~250 land tiles, capped so huge planets stay fast). */
-export const wildTarget = (world) => Math.min(3600, Math.round(landCount(world) / 250 * 3.4));
+export const wildTarget = (world) => Math.min(1400, Math.round(landCount(world) / 650 * 3.4));
 
 function pickKind(biome, rng) {
   let tot = 0; for (const [, a] of NATURAL) if (a.biomes.includes(biome)) tot += a.w;
@@ -59,6 +61,7 @@ export function seedWildlife(world, rng, count = Math.round(wildTarget(world) * 
 
 export function stepAnimals(world, dt, rng, hotChunks) {
   const W = world.W, t = world.tiles;
+  if (!world._akinds) { world._akinds = true; for (const a of Object.values(world.animals)) if (!ANIMALS[a.kind]) delete world.animals[a.id]; } // kinds retired in v0.7
   if (!world._seeded) { world._seeded = true; const have = Object.keys(world.animals).length, want = wildTarget(world); if (have < want * 0.3) seedWildlife(world, rng, Math.round(want * 0.7) - have); }
   const tick = world._atick = ((world._atick || 0) + 1) % 1e9, CW = Math.ceil(W / CHUNK);
   // rebuild the crowding grid now and then: animals per kind per cell, for mates and carrying capacity
@@ -85,7 +88,11 @@ export function stepAnimals(world, dt, rng, hotChunks) {
         if (a.bcd <= 0 && total < cap && rng.chance(dt * 1.5)) tryBreed(world, rng, a, A, t);
       }
     }
-    if (a.dead) { a.rot = (a.rot || 0) + dt; if (a.rot > 3) delete world.animals[a.id]; continue; }
+    if (a.dead) { // an unclaimed carcass is butchered by nature: meat and hide fall where it lies (near people), then it's gone
+      a.rot = (a.rot || 0) + dt;
+      if (a.rot > 0.8) { const dr = ANIMAL_DROPS[a.kind]; if (dr && hotChunks.has(Math.floor(a.y / CHUNK) * CW + Math.floor(a.x / CHUNK))) { dropItem(world, dr[0], Math.ceil(dr[1] * 0.6), a.x, a.y); if (dr[3]) dropItem(world, dr[2], dr[3], a.x + 0.3, a.y); } delete world.animals[a.id]; }
+      continue;
+    }
     if (a.hp <= 0) {
       a.dead = true; world.fx.push({ type: 'animalDeath', aid: a.id, t: world.time });
       // spirits and slimes leave a little glitter for whoever's people felled them (player nations only)

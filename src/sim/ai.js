@@ -2,7 +2,7 @@
 // Jobs are picked by a utility score that mixes settlement needs, skills and passions —
 // similar to RimWorld work priorities, but fully autonomous (you are a god, not a manager).
 import { F, BIOMES } from '../data/biomes.js';
-import { BUILDINGS } from '../data/buildings.js';
+import { BUILDINGS, buildCost } from '../data/buildings.js';
 import { eraOf } from '../data/eras.js';
 import { MENTAL_BREAKS, BREAK_LABELS } from '../data/society.js';
 import { findPath, tileCost } from './pathfind.js';
@@ -13,6 +13,9 @@ import { settlementBuildings, bCenter, pawnsNear, logEvent, emitFx } from './wor
 import { tempAt, cellAt } from '../world/atmosphere.js';
 import { ignite } from '../world/physics.js';
 import { wrap, dist, dx, clamp } from '../core/util.js';
+import { DAY_LEN } from '../core/time.js';
+import { addItem, takeCat, dropItem, nearestDrop } from './items.js';
+import { CROPS, ANIMAL_DROPS, cropKindAt, wildFruit, itemCat } from '../data/items.js';
 
 const tileIdx = (world, x, y) => Math.floor(y) * world.W + wrap(Math.floor(x), world.W);
 
@@ -31,7 +34,7 @@ export function walk(world, p, dt) {
   const tx = (i % W) + 0.5, ty = Math.floor(i / W) + 0.5;
   const ddx = dx(p.x, tx, W), ddy = ty - p.y, d = Math.hypot(ddx, ddy);
   const cost = tileCost(world.tiles, tileIdx(world, p.x, p.y)) || 1;
-  const step = (moveSpeed(p) / cost) * dt;
+  const step = (moveSpeed(p) / cost) * dt * (1 + (world.nations[p.nationId]?.techFx?.move || 0));
   if (Math.abs(ddx) > 0.01) p.facing = ddx > 0 ? 1 : -1;
   p.moving = true;
   if (d <= step) { p.x = wrap(tx, W); p.y = ty; p.pathI++; }
@@ -60,10 +63,11 @@ export function stepPawn(world, p, dt, ctx) {
 
   // --- needs ---
   const hungerRate = 0.85 * (1 + (p.fx.hunger || 0)) * (isChild(p) ? 0.7 : 1);
-  p.needs.food = clamp(p.needs.food - hungerRate * dt, 0, 1);
-  p.needs.rest = clamp(p.needs.rest + (p.state === 'sleep' ? 2.6 : -1.0) * dt, 0, 1);
-  p.needs.joy = clamp(p.needs.joy - 0.5 * dt, 0, 1);
-  p.needs.social = clamp(p.needs.social - 0.55 * dt, 0, 1);
+  const cd = dt / DAY_LEN; // needs follow the calendar day, not the work clock
+  p.needs.food = clamp(p.needs.food - hungerRate * 1.15 * cd, 0, 1);
+  p.needs.rest = clamp(p.needs.rest + (p.state === 'sleep' ? 2.9 : -1.0) * cd, 0, 1);
+  p.needs.joy = clamp(p.needs.joy - 0.7 * cd, 0, 1);
+  p.needs.social = clamp(p.needs.social - 0.75 * cd, 0, 1);
   if (p.needs.food <= 0 && rng.chance(dt * 2)) p.blood = Math.max(0.3, p.blood - 0.05); // malnutrition
 
   // --- situational thoughts (refresh ~4x/day) ---
@@ -120,11 +124,11 @@ export function stepPawn(world, p, dt, ctx) {
 
   // --- mental state ---
   if (p.brk) { if (p.brk.until < now) endBreak(world, p); else return stepBreak(world, p, dt, ctx); }
-  else if (!isChild(p) && (p._mb = (p._mb || 0) + dt) > 0.1) {
+  else if (!isChild(p) && (p._mb = (p._mb || 0) + dt) > 0.1 * DAY_LEN) { // break risk is judged a few times per calendar day
     p._mb = 0;
     const off = p.fx.breakOff || 0;
     const lvl = p.mood < 5 + off ? 'extreme' : p.mood < 20 + off ? 'major' : p.mood < 35 + off ? 'minor' : null;
-    if (lvl && rng.chance({ minor: 0.05, major: 0.08, extreme: 0.12 }[lvl])) return startBreak(world, p, lvl, rng);
+    if (lvl && rng.chance({ minor: 0.04, major: 0.07, extreme: 0.11 }[lvl])) return startBreak(world, p, lvl, rng);
     if (!p.insp && p.mood > 80 && rng.chance(0.004)) startInspiration(world, p, rng.pick(['work', 'research', 'craft']));
   }
   if (p.insp && p.insp.until < now) p.insp = null;
@@ -134,7 +138,7 @@ export function stepPawn(world, p, dt, ctx) {
   if (p.job) doJob(world, p, dt, ctx);
 }
 
-export const localTime = (world, x) => (world.time + (x / world.W) - 0.5 + 10) % 1;
+export const localTime = (world, x) => (world.time / DAY_LEN + (x / world.W) - 0.5 + 10) % 1;
 
 // ---------- mental breaks ----------
 function startBreak(world, p, lvl, rng) {
@@ -260,6 +264,48 @@ function stepPossessed(world, p, dt, ctx) {
 
 // ---------- job selection ----------
 const W8 = (v) => Math.max(0, v);
+/** Professions: each adult specialises in the trade of their best skill (passion counts extra). */
+export const WORKS = {
+  builder: { name: 'Builder', skill: 'construction', icon: 'hammer', desc: 'Hauls materials to sites, builds, fells trees.' },
+  farmer: { name: 'Farmer', skill: 'plants', icon: 'wheat', desc: 'Sows and harvests fields, forages wild plants.' },
+  hunter: { name: 'Hunter', skill: 'animals', icon: 'sword', desc: 'Hunts game and fishes.' },
+  miner: { name: 'Miner', skill: 'mining', icon: 'mountain', desc: 'Quarries stone and digs ore.' },
+  cook: { name: 'Cook', skill: 'cooking', icon: 'meals', desc: 'Turns raw food into meals and rations.' },
+  crafter: { name: 'Crafter', skill: 'crafting', icon: 'cloth', desc: 'Tailors clothes, makes gear and goods.' },
+  scholar: { name: 'Scholar', skill: 'intellectual', icon: 'book', desc: 'Researches at the study.' },
+  doctor: { name: 'Doctor', skill: 'medical', icon: 'medicine', desc: 'Tends the sick and brews medicine.' },
+  priest: { name: 'Priest', skill: 'social', icon: 'dove', desc: 'Leads worship for Glitter.' },
+};
+const ALT = { melee: 'hunter', shooting: 'hunter', artistic: 'crafter' };
+export function bestWork(p) {
+  let best = 'builder', bv = -1;
+  for (const [id, w] of Object.entries(WORKS)) { const sk = p.skills[w.skill]; const v = sk.lvl + sk.passion * 3; if (v > bv) { bv = v; best = id; } }
+  for (const [sk, id] of Object.entries(ALT)) { const v = p.skills[sk].lvl + p.skills[sk].passion * 3 - 1; if (v > bv) { bv = v; best = id; } }
+  return best;
+}
+const workScore = (p, id) => { const sk = p.skills[WORKS[id].skill]; return sk.lvl + sk.passion * 3; };
+/** Give every adult a profession; make sure the trades the settlement needs have at least one person. */
+export function assignWorks(world, s, n, pawns) {
+  const adults = pawns.filter((p) => !isChild(p) && p.role !== 'soldier');
+  const count = {};
+  for (const p of adults) { if (!p.work || !WORKS[p.work]) p.work = bestWork(p); count[p.work] = (count[p.work] || 0) + 1; }
+  if (adults.length < 3) return;
+  const has = (t) => settlementBuildings(world, s, t).length > 0;
+  const need = ['builder', 'hunter'];
+  if (has('farm')) need.push('farmer');
+  if (settlementBuildings(world, s).some((b) => BUILDINGS[b.type].fn.cook)) need.push('cook');
+  if (has('research')) need.push('scholar');
+  if (adults.length >= 6 && has('healer')) need.push('doctor');
+  if (has('mine') || n.era >= 1) need.push('miner');
+  if (n.techs?.tailoring && adults.length >= 5) need.push('crafter');
+  for (const w of need) {
+    if (count[w]) continue;
+    const donor = Object.entries(count).filter(([k, c]) => c > 1).sort((a, b) => b[1] - a[1])[0]?.[0];
+    if (!donor) break;
+    const pick = adults.filter((p) => p.work === donor).sort((a, b) => workScore(b, w) - workScore(a, w))[0];
+    if (pick) { pick.work = w; count[donor]--; count[w] = 1; }
+  }
+}
 export function chooseJob(world, p, ctx) {
   const { rng, s, n } = ctx;
   const now = world.time;
@@ -295,42 +341,61 @@ export function chooseJob(world, p, ctx) {
   if (p.needs.social < 0.3 || rng.chance(0.04)) { const q = pawnsNear(world, p.x, p.y, 12).find((q) => q !== p && !q.dead && !q.downed && q.state !== 'sleep' && !q.brk); if (q) return { type: 'chat', pid: q.id, until: now + 0.08 }; }
   if (p.role === 'prophet' && rng.chance(0.5)) { const t = settlementBuildings(world, s, 'temple')[0]; if (t) return { type: 'preach', bid: t.id, until: now + 0.4 }; }
 
-  // ---- work: weighted by need, skill and passion ----
+  // ---- work: each adult has a profession (their best skill) and sticks to it; others help only when it's urgent ----
   const opts = [];
   const pop = s.pop || 1;
   const focus = n.laws.focus;
+  const job = p.work || bestWork(p);
   const pref = (skill) => (0.5 + p.skills[skill].lvl * 0.06 + p.skills[skill].passion * 0.35);
-  const site = s.buildings.map((id) => world.buildings[id]).find((b) => b && !b.built && !BUILDINGS[b.type].field);
-  if (site) opts.push([{ type: 'build', bid: site.id }, 3 * pref('construction') * (focus === 'build' ? 2 : 1)]);
+  const as = (work, w) => w * (work === job ? 7 : 0.45);          // a specialist strongly prefers their own trade
+  const add = (o, work, w) => { if (w > 0) opts.push([o, as(work, w)]); };
+  // haul anything lying around, and dress yourself once tailoring is known
+  const drop = nearestDrop(world, p.x, p.y, s.radius + 10);
+  if (drop) opts.push([{ type: 'haul', did: drop.id }, 2.2 + (job === 'hauler' ? 4 : 0)]);
+  if (n.techs?.tailoring && (p.gearEra < n.era || !p.dressed) && (st.cloth || 0) >= (n.era >= 2 ? 2 : 1)) {
+    const tb = settlementBuildings(world, s, 'tailor')[0] || settlementBuildings(world, s, 'workshop')[0];
+    opts.push([{ type: 'tailor', bid: tb?.id ?? null }, job === 'crafter' ? 9 : 5]);
+  }
+  // construction: deliver materials, then build
+  const sites = s.buildings.map((id) => world.buildings[id]).filter((b) => b && !b.built && !BUILDINGS[b.type].field);
+  for (const site of sites.slice(0, 3)) {
+    const left = remainingCost(site), r = Object.keys(left).find((k) => (st[k] || 0) >= 1);
+    if (r) add({ type: 'supply', bid: site.id, res: r }, 'builder', 3.2 * (focus === 'build' ? 2 : 1) * (site.byPlayer ? 1.6 : 1));
+    else if (!Object.keys(left).length) add({ type: 'build', bid: site.id }, 'builder', 3.5 * pref('construction') * (focus === 'build' ? 2 : 1) * (site.byPlayer ? 1.6 : 1));
+  }
   const fields = settlementBuildings(world, s, 'farm', false);
   if (fields.length) {
     const unbuilt = fields.find((f) => !f.built);
-    if (unbuilt) opts.push([{ type: 'build', bid: unbuilt.id }, 1.5 * pref('plants')]);
+    if (unbuilt) add({ type: 'build', bid: unbuilt.id }, 'farmer', 2 * pref('plants'));
     const fi = findFarmWork(world, fields, rng);
-    if (fi) opts.push([{ type: 'farm', i: fi.i, sow: fi.sow }, (fi.sow ? 2 : 4.5) * pref('plants') * (focus === 'food' ? 2 : 1)]);
+    if (fi) add({ type: 'farm', i: fi.i, sow: fi.sow }, 'farmer', (fi.sow ? 2.5 : 4.5) * pref('plants') * (focus === 'food' ? 2 : 1));
   }
   const foodDays = (st.food + st.meals + st.rations) / pop;
-  opts.push([{ type: 'hunt' }, (W8(8 - foodDays) * 0.45 + (n.era <= 1 ? 0.5 : 0.1)) * pref('animals')]);
-  if (foodDays < 10) opts.push([{ type: 'fish' }, (W8(10 - foodDays) * 0.4 + 0.3) * pref('animals')]);
-  opts.push([{ type: 'gatherFeat', feats: [F.BERRY], res: 'food' }, (W8(8 - foodDays) * 0.6 + (n.era === 0 ? 0.8 : 0.1)) * pref('plants')]);
+  const hungry = foodDays < 3; // everyone pitches in for food when stores run dry
+  const urgent = (w) => (hungry ? w * 4 : w);
+  add({ type: 'hunt' }, 'hunter', urgent(W8(10 - foodDays) * 0.5 + 0.8) * pref('animals'));
+  if (foodDays < 14) add({ type: 'fish' }, 'hunter', urgent(W8(14 - foodDays) * 0.4 + 0.4) * pref('animals'));
+  add({ type: 'gatherFeat', feats: [F.BERRY], res: 'food' }, 'farmer', urgent(W8(10 - foodDays) * 0.6 + (n.era === 0 ? 1 : 0.2)) * pref('plants'));
   const cookers = settlementBuildings(world, s).filter((b) => BUILDINGS[b.type].fn.cook);
-  if (cookers.length && st.food > 2 && st.meals < pop * 2.5) opts.push([{ type: 'cook', bid: rng.pick(cookers).id }, 2.2 * pref('cooking')]);
+  if (cookers.length && st.food > 2 && st.meals < pop * 3) add({ type: 'cook', bid: rng.pick(cookers).id }, 'cook', 2.6 * pref('cooking'));
   const kitchens = settlementBuildings(world, s, 'kitchen');
-  if (kitchens.length && st.food > pop * 3 && st.rations < pop * 6) opts.push([{ type: 'cook', bid: kitchens[0].id, rations: true }, 1.4 * pref('cooking')]);
-  const wantWood = 40 + pop * 2 - st.wood + (s.need?.wood || 0) * 2, wantStone = (n.era >= 1 ? 30 : 10) + pop - st.stone + (s.need?.stone || 0) * 2;
-  if (wantWood > 0) opts.push([{ type: 'gatherFeat', feats: [F.TREE], res: 'wood' }, Math.min(3, wantWood / 20) * pref('construction') + 0.2]);
-  if (wantStone > 0) opts.push([{ type: 'gatherFeat', feats: [F.ROCK], res: 'stone' }, Math.min(2.5, wantStone / 20) * pref('mining') + 0.1]);
-  if ((n.era >= 2 && st.metal < 20 + pop) || s.need?.metal) opts.push([{ type: 'gatherFeat', feats: [F.ORE, F.GOLD], res: 'metal' }, 1.2 * pref('mining')]);
+  if (kitchens.length && st.food > pop * 3 && st.rations < pop * 6) add({ type: 'cook', bid: kitchens[0].id, rations: true }, 'cook', 1.6 * pref('cooking'));
+  const wantWood = 40 + pop * 2 - st.wood + (s.need?.wood || 0) * 2, wantStone = (n.era >= 1 ? 30 : 12) + pop - st.stone + (s.need?.stone || 0) * 2;
+  if (wantWood > 0) add({ type: 'gatherFeat', feats: [F.TREE], res: 'wood' }, 'builder', Math.min(3, wantWood / 20) * pref('construction') + 0.3);
+  const mines = settlementBuildings(world, s, 'mine');
+  if (mines.length && (wantStone > 0 || st.metal < 30 + pop * 2)) add({ type: 'mine', bid: rng.pick(mines).id }, 'miner', 3 * pref('mining'));
+  if (wantStone > 0) add({ type: 'gatherFeat', feats: [F.ROCK], res: 'stone' }, 'miner', Math.min(2.5, wantStone / 20) * pref('mining') + 0.2);
+  if ((n.era >= 1 && st.metal < 20 + pop) || s.need?.metal) add({ type: 'gatherFeat', feats: [F.ORE, F.GOLD], res: 'metal' }, 'miner', 1.4 * pref('mining'));
   const labs = settlementBuildings(world, s, 'research');
-  if (labs.length) opts.push([{ type: 'research', bid: rng.pick(labs).id, until: now + 0.35 }, (1.6 + (p.fx.research || 0) * 2) * pref('intellectual') * (focus === 'science' ? 2.2 : 1) * (1 + n.ideology.faith / 200)]);
+  if (labs.length) add({ type: 'research', bid: rng.pick(labs).id, until: now + 0.6 }, 'scholar', (1.8 + (p.fx.research || 0) * 2) * pref('intellectual') * (focus === 'science' ? 2.2 : 1) * (1 + n.ideology.faith / 200));
   const temples = settlementBuildings(world, s, 'temple');
-  if (temples.length) opts.push([{ type: 'worship', bid: rng.pick(temples).id, until: now + 0.2 }, (0.8 + (p.fx.glitter || 0)) * (1 - n.ideology.faith / 150) * (focus === 'faith' ? 2.2 : 1)]);
+  if (temples.length) add({ type: 'worship', bid: rng.pick(temples).id, until: now + 0.4 }, 'priest', (1 + (p.fx.glitter || 0)) * (1 - n.ideology.faith / 150) * (focus === 'faith' ? 2.2 : 1));
   const shops = settlementBuildings(world, s).filter((b) => BUILDINGS[b.type].fn.craft);
-  if (shops.length && (p.gearEra < n.era || st.medicine < pop * 0.5 || st.cloth > 10)) opts.push([{ type: 'craft', bid: rng.pick(shops).id, until: now + 0.3 }, 1.6 * pref('crafting')]);
+  if (shops.length && (st.medicine < pop * 0.5 || st.cloth > 10 || p.gearEra < n.era)) add({ type: 'craft', bid: rng.pick(shops).id, until: now + 0.5 }, 'crafter', 1.8 * pref('crafting'));
   const healers = settlementBuildings(world, s, 'healer');
-  if (healers.length && st.medicine < pop * 0.4 && st.food > 6) opts.push([{ type: 'brew', bid: healers[0].id, until: now + 0.25 }, 0.8 * pref('medical')]);
-  if (p.role === 'soldier') opts.push([{ type: 'patrol', until: now + 0.25 }, 1.2 * (focus === 'military' ? 2 : 1)]);
-  opts.push([{ type: 'wander', until: now + 0.1 }, 0.15]);
+  if (healers.length && st.medicine < pop * 0.4 && st.food > 6) add({ type: 'brew', bid: healers[0].id, until: now + 0.4 }, 'doctor', 1.2 * pref('medical'));
+  if (p.role === 'soldier') opts.push([{ type: 'patrol', until: now + 0.4 }, 1.2 * (focus === 'military' ? 2 : 1)]);
+  opts.push([{ type: 'wander', until: now + 0.15 }, 0.12]);
 
   return rng.weighted(opts);
 }
@@ -406,40 +471,57 @@ function arriveAt(world, p, x, y, dt, r = 1.2, budget) {
   return false;
 }
 
+/** The item a tile feature yields. */
+export function tileItem(world, i, era = 0) {
+  const t = world.tiles, f = t.feat[i];
+  if (f === F.TREE) return 'wood';
+  if (f === F.ROCK) return 'stone';
+  if (f === F.GOLD) return 'gold';
+  if (f === F.ORE) return era >= 3 ? 'iron' : 'copper';
+  if (f === F.BERRY) return wildFruit(t.biome[i]);
+  if (f === F.CROP_READY) return CROPS[cropKindAt(world, i)];
+  return null;
+}
 function harvestTile(world, p, i, ctx, mult = 1) {
   const t = world.tiles, f = t.feat[i], s = ctx.s;
   const n = ctx.n;
-  const res = f === F.TREE ? 'wood' : f === F.ROCK ? 'stone' : f === F.ORE || f === F.GOLD ? 'metal' : f === F.BERRY ? 'food' : f === F.CROP_READY ? 'food' : null;
-  if (!res) return;
-  const skill = res === 'wood' ? 'construction' : res === 'food' ? 'plants' : 'mining';
-  let amt = res === 'wood' ? 4 : res === 'stone' ? 3 : res === 'metal' ? (f === F.GOLD ? 6 : 2) : f === F.CROP_READY ? 6 : 6;
-  amt = Math.round(amt * skillFactor(p, skill) * mult * (n && n.ideology.nature < -40 && res !== 'food' ? 1.25 : 1));
-  if (f === F.ORE && n && n.era < 2) { amt = 1; } // stone tools barely chip ore
+  const item = tileItem(world, i, n?.era || 0); if (!item) return;
+  const res = itemCat(item);
+  const skill = res === 'wood' ? 'construction' : f === F.BERRY || f === F.CROP_READY ? 'plants' : 'mining';
+  let amt = f === F.TREE ? 4 : f === F.ROCK ? 3 : f === F.GOLD ? 3 : f === F.ORE ? 2 : f === F.CROP_READY ? 6 : 5;
+  amt = Math.round(amt * skillFactor(p, skill) * mult * (n && n.ideology.nature < -40 && res !== 'food' ? 1.25 : 1) * (1 + (n?.techFx?.[res] || 0)));
+  if (f === F.ORE && n && n.era < 1 && !n.techFx?.metal) { amt = 1; } // stone tools barely chip ore until copper working
+  amt = Math.max(1, amt);
   gainXp(p, skill, 60);
   if (f === F.CROP_READY) { t.feat[i] = F.FARM; t.crop[i] = 0; }
   else if (t.featHp[i] > 1) t.featHp[i]--;
   else { t.feat[i] = f === F.TREE ? F.STUMP : F.NONE; t.featHp[i] = 0; if (n && n.ideology.nature < -20) t.pollution[i] = Math.min(255, t.pollution[i] + 4); }
   world.dirty.add(i);
-  p.carry = { res, amt: (p.carry?.res === res ? p.carry.amt : 0) + amt };
+  const x = (i % world.W) + 0.5, y = Math.floor(i / world.W) + 0.5;
+  emitFx(world, { type: 'chip', x, y, res, item });
+  if (p.possessedBy) { dropItem(world, item, amt, x, y + 0.3); return; } // possessed: it falls at your feet; haulers fetch it
+  if (p.carry && p.carry.item && p.carry.item !== item) { const ex = (p.carry.extra ||= []), e = ex.find((z) => z[0] === item); if (e) e[1] += amt; else ex.push([item, amt]); }
+  else p.carry = { res, item, amt: (p.carry?.item === item ? p.carry.amt : 0) + amt, extra: p.carry?.extra };
   if (res === 'stone' && ctx.rng.chance(0.06)) p.carry.flint = true;
-  emitFx(world, { type: 'chip', x: (i % world.W) + 0.5, y: Math.floor(i / world.W) + 0.5, res });
-  if (p.possessedBy && s) { s.stock[res] += p.carry.amt; p.carry = null; } // possessed: deposit instantly
 }
 
+const carried = (p) => (p.carry ? p.carry.amt + (p.carry.extra || []).reduce((a, e) => a + e[1], 0) : 0);
 function deliver(world, p, dt, ctx) {
   const { s } = ctx;
   const store = settlementBuildings(world, s, 'storage')[0] || world.buildings[s.buildings[0]] || null;
   const [x, y] = store ? bCenter(store) : [s.x, s.y];
   if (!arriveAt(world, p, x, y, dt, 1.8)) return false;
-  s.stock[p.carry.res] = (s.stock[p.carry.res] || 0) + p.carry.amt;
-  if (p.carry.hide) s.stock.cloth += p.carry.hide;
+  const c = p.carry;
+  if (c.item) addItem(s, c.item, c.amt); else s.stock[c.res] = (s.stock[c.res] || 0) + c.amt;
+  for (const [id, k] of c.extra || []) addItem(s, id, k);
+  if (c.hide) addItem(s, 'hide', c.hide);
   p.carry = null;
   return true;
 }
 
 export function doJob(world, p, dt, ctx) {
   const j = p.job, { s, n, rng } = ctx, now = world.time, t = world.tiles, W = world.W;
-  if (p.carry && j.type !== 'gather' && j.type !== 'gatherFeat' && j.type !== 'hunt' && j.type !== 'fish') { if (deliver(world, p, dt, ctx)) p.job = null; return; }
+  if (p.carry && j.type !== 'gather' && j.type !== 'gatherFeat' && j.type !== 'hunt' && j.type !== 'fish' && j.type !== 'supply' && j.type !== 'haul') { if (deliver(world, p, dt, ctx)) p.job = null; return; }
   const done = () => { p.job = null; p.state = 'idle'; };
   switch (j.type) {
     case 'wander': {
@@ -491,7 +573,7 @@ export function doJob(world, p, dt, ctx) {
       if (j.t < 0.05) return;
       const useMed = s.stock.medicine >= 1;
       if (useMed) s.stock.medicine--;
-      const quality = tend(q, p, useMed ? MED_QUALITY[n.era] : 0, q.bedIn >= 0);
+      const quality = tend(q, p, (useMed ? MED_QUALITY[n.era] : 0) + (n.techFx?.heal || 0), q.bedIn >= 0);
       gainXp(p, 'medical', 300);
       addThought(q, 'tended', now);
       changeOpinion(q, p, 6);
@@ -500,7 +582,7 @@ export function doJob(world, p, dt, ctx) {
       return done();
     }
     case 'gather': case 'gatherFeat': {
-      if (p.carry && p.carry.amt >= 8) { if (deliver(world, p, dt, ctx)) return done(); return; }
+      if (p.carry && carried(p) >= 8) { if (deliver(world, p, dt, ctx)) return done(); return; }
       if (j.i === undefined || !(j.feats || [F.BERRY, F.TREE, F.ROCK, F.ORE]).includes(t.feat[j.i])) {
         if (j.found) { if (p.carry) { j.i = undefined; if (deliver(world, p, dt, ctx)) done(); return; } return done(); }
         j.i = findFeature(world, p, j.feats || [F.BERRY], 18, rng); j.found = true;
@@ -537,7 +619,9 @@ export function doJob(world, p, dt, ctx) {
       }
       if (a.dead) { // butcher
         if (!arriveAt(world, p, a.x, a.y, dt, 1.2)) return;
-        p.carry = { res: 'food', amt: ANIMALS[a.kind].meat, hide: ANIMALS[a.kind].hide };
+        const dr = ANIMAL_DROPS[a.kind] || ['beef', ANIMALS[a.kind].meat, 'hide', ANIMALS[a.kind].hide];
+        p.carry = { res: 'food', item: dr[0], amt: Math.round(dr[1] * (1 + (n.techFx?.food || 0))), extra: dr[3] ? [[dr[2], Math.round(dr[3] * (1 + (n.techFx?.cloth || 0)))]] : [] };
+        emitFx(world, { type: 'chip', x: a.x, y: a.y, res: 'food', item: dr[0] });
         delete world.animals[a.id]; gainXp(p, 'animals', 200);
         return;
       }
@@ -555,7 +639,7 @@ export function doJob(world, p, dt, ctx) {
       if (!arriveAt(world, p, x, y, dt, 1.0)) return;
       p.state = 'work';
       j.t = (j.t || 0) + dt * workSpeed(p) * skillFactor(p, 'animals') * (n.era >= 2 ? 1.4 : 1);
-      if (j.t > 0.05) { j.t = 0; gainXp(p, 'animals', 60); if (rng.chance(0.75)) { p.carry = { res: 'food', amt: (p.carry?.amt || 0) + 3 + (n.era >= 2 ? 1 : 0) }; emitFx(world, { type: 'chip', x, y, res: 'food' }); } if ((j.n = (j.n || 0) + 1) >= 3) j.done = true; }
+      if (j.t > 0.05) { j.t = 0; gainXp(p, 'animals', 60); if (rng.chance(0.75)) { const fi = p.carry?.item || (rng.chance(0.3) ? 'fish2' : 'fish'); p.carry = { res: 'food', item: fi, amt: (p.carry?.amt || 0) + 3 + (n.era >= 2 ? 1 : 0) }; emitFx(world, { type: 'chip', x, y, res: 'food', item: fi }); } if ((j.n = (j.n || 0) + 1) >= 3) j.done = true; }
       if (j.done && p.carry) return;
       if (j.done) return done();
       return;
@@ -565,13 +649,14 @@ export function doJob(world, p, dt, ctx) {
       const [x, y] = bCenter(b);
       if (!arriveAt(world, p, x, y, dt, 1.6)) return;
       p.state = 'work';
-      j.t = (j.t || 0) + dt * workSpeed(p) * skillFactor(p, 'cooking') * (BUILDINGS[b.type].fn.cook || 1);
+      j.t = (j.t || 0) + dt * workSpeed(p) * skillFactor(p, 'cooking') * (BUILDINGS[b.type].fn.cook || 1) * (1 + (n.techFx?.cook || 0));
       if (j.t < 0.03) return;
       j.t = 0;
-      const batch = Math.min(s.stock.food, 4);
-      if (batch < 1) return done();
-      s.stock.food -= batch;
-      if (j.rations) s.stock.rations += batch; else s.stock.meals += batch * (rng.chance(0.03 * (10 - p.skills.cooking.lvl) / 10) ? 0 : 1); // poor cooks waste some
+      if ((s.stock.food || 0) < 1) return done();
+      const used = takeCat(s, 'food', 4), batch = used.reduce((a2, [, k]) => a2 + k, 0), main = used[0]?.[0];
+      const dish = j.rations ? 'ration' : main === 'wheat' || main === 'corn' ? 'bread' : main === 'poultry' || main === 'egg' ? 'roast' : main === 'berries' || main === 'apple' || main === 'grapes' ? 'pastry' : 'meal';
+      if (j.rations) addItem(s, 'ration', batch); else if (!rng.chance(0.03 * (10 - p.skills.cooking.lvl) / 10)) addItem(s, dish, batch); // poor cooks waste some
+      emitFx(world, { type: 'chip', x, y, res: j.rations ? 'rations' : 'meals', item: dish });
       gainXp(p, 'cooking', 120);
       if ((j.n = (j.n || 0) + 1) >= 3) return done();
       return;
@@ -581,14 +666,15 @@ export function doJob(world, p, dt, ctx) {
       const [x, y] = bCenter(b);
       if (!arriveAt(world, p, x, y, dt, Math.max(b.w, b.h) / 2 + 0.8)) return;
       const def = BUILDINGS[b.type];
-      if (!b.paid) {
-        const cost = scaledCost(def, b.era);
-        for (const [r, v] of Object.entries(cost)) if ((s.stock[r] || 0) < v) { j.waitFor = r; return done(); }
-        for (const [r, v] of Object.entries(cost)) s.stock[r] -= v;
+      if (!b.paid) { // materials must be carried to the site first
+        const left = remainingCost(b);
+        const r = Object.keys(left).find((k) => (s.stock[k] || 0) >= 1);
+        if (r) { p.job = { type: 'supply', bid: b.id, res: r }; return; }
+        if (Object.keys(left).length) { j.waitFor = Object.keys(left)[0]; return done(); }
         b.paid = true;
       }
       p.state = 'work';
-      b.progress += (dt * workSpeed(p) * skillFactor(p, 'construction') * 100) / Math.max(10, def.work * (1 + b.era * 0.15));
+      b.progress += (dt * workSpeed(p) * skillFactor(p, 'construction') * (1 + (n.techFx?.build || 0)) * 100) / Math.max(10, def.work * (1 + b.era * 0.15));
       gainXp(p, 'construction', 30);
       if (rng.chance(dt * 20)) emitFx(world, { type: 'chip', x, y, res: 'wood' });
       if (b.progress >= 1) {
@@ -598,6 +684,65 @@ export function doJob(world, p, dt, ctx) {
         return done();
       }
       return;
+    }
+    case 'supply': { // fetch materials from the store and carry them to a construction site
+      const b = world.buildings[j.bid]; if (!b || b.built) { if (p.carry) { if (deliver(world, p, dt, ctx)) done(); return; } return done(); }
+      if (!p.carry) {
+        const store = storeOf(world, s), [sx, sy] = store ? bCenter(store) : [s.x, s.y];
+        if (!arriveAt(world, p, sx, sy, dt, 1.8)) return;
+        const need = remainingCost(b)[j.res] || 0; if (need <= 0) return done();
+        const got = takeCat(s, j.res, Math.min(need, 8 + Math.floor(p.skills.construction.lvl / 2)));
+        const amt = got.reduce((a2, [, k]) => a2 + k, 0); if (amt <= 0) return done();
+        p.carry = { res: j.res, item: got[0][0], amt, extra: got.slice(1), site: b.id };
+        return;
+      }
+      const [x, y] = bCenter(b);
+      if (!arriveAt(world, p, x, y, dt, Math.max(b.w, b.h) / 2 + 0.8)) return;
+      b.have ||= {}; b.have[p.carry.res] = (b.have[p.carry.res] || 0) + carried(p);
+      emitFx(world, { type: 'chip', x, y, res: p.carry.res, item: p.carry.item });
+      p.carry = null;
+      if (!Object.keys(remainingCost(b)).length) { b.paid = true; p.job = { type: 'build', bid: b.id }; return; }
+      return done();
+    }
+    case 'haul': { // bring something lying on the ground into the store
+      const d = world.drops?.[j.did];
+      if (!p.carry) {
+        if (!d) return done();
+        d.claim = p.id;
+        if (!arriveAt(world, p, d.x, d.y, dt, 0.9)) return;
+        const k = Math.min(d.n, 14); d.n -= k; if (d.n <= 0.01) delete world.drops[d.id]; else d.claim = 0;
+        p.carry = { res: itemCat(d.item), item: d.item, amt: k };
+        return;
+      }
+      if (deliver(world, p, dt, ctx)) done();
+      return;
+    }
+    case 'mine': { // dig stone and ore out of a mine: endless, but slow without skill
+      const b = world.buildings[j.bid]; if (!b || !b.built) return done();
+      if (p.carry && carried(p) >= 10) { if (deliver(world, p, dt, ctx)) done(); return; }
+      const [x, y] = bCenter(b);
+      if (!arriveAt(world, p, x, y + 0.6, dt, 1.6)) return;
+      p.state = 'work'; p.tool = 'pick';
+      j.t = (j.t || 0) + dt * workSpeed(p) * skillFactor(p, 'mining') * (1 + (n.techFx?.mine || 0));
+      if (j.t < 0.05) return;
+      j.t = 0; gainXp(p, 'mining', 90);
+      const r = rng.next(), item = r < 0.05 + n.era * 0.005 ? 'gold' : r < 0.45 ? (n.era >= 3 ? 'iron' : 'copper') : 'stone';
+      const amt = item === 'gold' ? 1 : 2 + Math.floor(p.skills.mining.lvl / 5);
+      if (p.carry?.item === item) p.carry.amt += amt; else if (p.carry) { const ex = (p.carry.extra ||= []), e = ex.find((z) => z[0] === item); if (e) e[1] += amt; else ex.push([item, amt]); } else p.carry = { res: itemCat(item), item, amt };
+      emitFx(world, { type: 'chip', x, y, res: itemCat(item), item });
+      return;
+    }
+    case 'tailor': { // sew a new outfit for yourself (or a child) from cloth, hides or wool
+      const b = j.bid != null ? world.buildings[j.bid] : null, [x, y] = b ? bCenter(b) : [s.x, s.y];
+      if (!arriveAt(world, p, x + rng.range(-0.5, 0.5), y + 0.8, dt, 1.8)) return;
+      p.state = 'work';
+      j.t = (j.t || 0) + dt * workSpeed(p) * skillFactor(p, 'crafting');
+      if (j.t < 0.06) return;
+      const who = world.pawns[j.pid] || p, cost = n.era >= 2 ? 2 : 1;
+      if ((s.stock.cloth || 0) < cost) return done();
+      takeCat(s, 'cloth', cost); who.gearEra = n.era; who.dressed = true; gainXp(p, 'crafting', 150);
+      addThought(who, 'newClothes', now); emitFx(world, { type: 'emote', pid: who.id, icon: 'shirt' });
+      return done();
     }
     case 'research': case 'worship': case 'relax': case 'craft': case 'brew': case 'preach': {
       const b = world.buildings[j.bid]; if (!b || !b.built) return done();
@@ -676,14 +821,14 @@ export function doJob(world, p, dt, ctx) {
   }
 }
 
-export const scaledCost = (def, era) => {
-  const out = {}; const m = 1 + era * 0.12;
-  for (const [r, v] of Object.entries(def.cost)) out[r] = Math.round(v * m);
-  // later eras swap wood for stone/metal
-  if (era >= 4 && out.wood) { out.stone = (out.stone || 0) + Math.round(out.wood * 0.5); out.wood = Math.round(out.wood * 0.5); }
-  if (era >= 6 && out.stone) { out.metal = (out.metal || 0) + Math.round(out.stone * 0.25); }
+/** What a construction site still needs delivered, by category. */
+export function remainingCost(b) {
+  const need = b.need || {}, have = b.have || {}, out = {};
+  for (const [r, v] of Object.entries(need)) { const d = v - (have[r] || 0); if (d > 0.01) out[r] = Math.ceil(d); }
   return out;
-};
+}
+export const storeOf = (world, s) => settlementBuildings(world, s, 'storage')[0] || world.buildings[s.buildings[0]] || null;
+export const scaledCost = (def, era) => buildCost(def, era);
 
 // ---------- social ----------
 export function socialInteraction(world, p, q, rng) {

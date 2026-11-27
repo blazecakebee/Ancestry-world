@@ -7,8 +7,11 @@ import { BIOMES, F, B, isWater } from '../data/biomes.js';
 import { createChild, createPawn, addThought, fullName, isChild, computeFx, opinion } from './pawn.js';
 import { placeBuildingNear, settlementBuildings, claimTerritory, foundSettlement, foundNation, logEvent, emitFx, bCenter, releaseTerritory, removeBuilding } from './world.js';
 import { tempAt } from '../world/atmosphere.js';
-import { scaledCost } from './ai.js';
+import { scaledCost, assignWorks, remainingCost } from './ai.js';
+import { syncItems, addItem } from './items.js';
+import { stepTech, initTechs, canBuildType } from './tech.js';
 import { wrap, dist, clamp } from '../core/util.js';
+import { DAY_LEN } from '../core/time.js';
 import { nationName } from '../data/names.js';
 import { creedFx, creedMood, stepCreed, forkCreed, hasCreed } from './creed.js';
 
@@ -20,9 +23,9 @@ export function nationMults(world, n) {
   const age = world.age?.id;
   const cf = creedFx(n);
   return {
-    researchMult: Math.max(0.3, (1 + (gov.research || 0) + cf.research + Math.max(0, n.ideology.faith) / 160) * (age === 'wonders' ? 1.3 : 1)),
-    glitterMult: Math.max(0.2, (1 + (gov.glitter || 0) + cf.glitter) * (n.buffs?.glitterUntil > world.time ? 1.5 : 1)),
-    moodBonus: (gov.mood || 0) + cf.mood + (hasCreed(n) ? creedMood(n) - (n.creed.doubt ? 4 : 0) : 0) + (age === 'hope' ? 6 : age === 'despair' ? -6 : 0),
+    researchMult: Math.max(0.3, (1 + (gov.research || 0) + cf.research + (n.techFx?.research || 0) + Math.max(0, n.ideology.faith) / 160) * (age === 'wonders' ? 1.3 : 1)),
+    glitterMult: Math.max(0.2, (1 + (gov.glitter || 0) + cf.glitter + (n.techFx?.glitter || 0)) * (n.buffs?.glitterUntil > world.time ? 1.5 : 1)),
+    moodBonus: (gov.mood || 0) + cf.mood + (n.techFx?.mood || 0) + (hasCreed(n) ? creedMood(n) - (n.creed.doubt ? 4 : 0) : 0) + (age === 'hope' ? 6 : age === 'despair' ? -6 : 0),
   };
 }
 
@@ -38,8 +41,10 @@ export function stepSettlement(world, s, dt, rng) {
   // storage cap
   const cap = settlementBuildings(world, s).reduce((a, b) => a + (BUILDINGS[b.type].fn.storage || 0), 0) + 80;
   for (const k of ['food', 'meals', 'rations', 'wood', 'stone']) s.stock[k] = Math.min(s.stock[k], cap * (k === 'rations' ? 1.5 : 1));
-  // housing assignment
+  syncItems(s);
+  // housing and professions
   if ((s._house = (s._house || 0) + dt) > 0.5) { s._house = 0; assignHomes(world, s, pawns); }
+  if ((s._works = (s._works || 0) + dt) > 1) { s._works = 0; assignWorks(world, s, n, pawns); }
   // mood & passive glitter
   let moodSum = 0;
   const m = nationMults(world, n);
@@ -59,6 +64,8 @@ export function stepSettlement(world, s, dt, rng) {
     s.pollution = clamp(s.pollution + dt * (settlementBuildings(world, s, 'factory').length * 4 + 1) - (n.ideology.nature > 0 ? 3 * dt : 0), 0, 255);
     if (rng.chance(dt * 4)) { const i = (s.y + rng.int(-5, 5)) * world.W + wrap(s.x + rng.int(-5, 5), world.W); world.tiles.pollution[i] = Math.min(255, world.tiles.pollution[i] + s.pollution * 0.2); }
   }
+  // hens lay
+  for (const b of settlementBuildings(world, s, 'coop')) addItem(s, 'egg', BUILDINGS.coop.fn.eggs * (1 + (n.techFx?.food || 0)) * dt / DAY_LEN);
   // crops grow
   growCrops(world, s, n, dt);
   // planner
@@ -98,7 +105,7 @@ function growCrops(world, s, n, dt) {
       if (tf < 0) { if (Math.random() < dt * 0.6) { t.crop[i] = 0; world.dirty.add(i); } continue; } // frost kills
       const wet = t.water[i] > 0.6 ? -0.5 : 1; // drowned crops
       const fert = Math.max(0.15, BIOMES[t.biome[i]].fert) * (indoor ? 1.2 : 1);
-      const g = harvest ? 255 : dt * 120 * fert * tf * eco * wet * (1 + n.era * 0.08);
+      const g = harvest ? 255 : dt * 60 * fert * tf * eco * wet * (1 + n.era * 0.08);
       const v = clamp(t.crop[i] + g, 0, 255);
       if (Math.floor(v / 40) !== Math.floor(t.crop[i] / 40)) world.dirty.add(i);
       t.crop[i] = v;
@@ -112,8 +119,12 @@ function countB(world, s, type) { return s.buildings.reduce((a, id) => a + (worl
 
 function planBuildings(world, s, n, rng) {
   // one AI construction project at a time (player-planned ones are extra)
+  // what open construction sites still lack beyond the stores: gatherers go get it
+  s.need = {};
+  for (const id of s.buildings) { const b = world.buildings[id]; if (!b || b.built) continue; for (const [r, v] of Object.entries(remainingCost(b))) s.need[r] = (s.need[r] || 0) + v; }
+  for (const r of Object.keys(s.need)) { s.need[r] = Math.max(0, s.need[r] - (s.stock[r] || 0)); if (!s.need[r]) delete s.need[r]; }
   const pending = s.buildings.map((id) => world.buildings[id]).filter((b) => b && !b.built && !b.byPlayer);
-  for (const b of pending) if (!b.paid && world.time - (b.placedAt ?? world.time) > 3) removeBuilding(world, b, false); // abandon stalled plans
+  for (const b of pending) if (!b.paid && !Object.keys(b.have || {}).length && world.time - (b.placedAt ?? world.time) > 3 * DAY_LEN) removeBuilding(world, b, false); // abandon stalled plans nobody could supply
   if (pending.some((b) => world.buildings[b.id])) return;
   const pop = s.pop, era = n.era, a = n.ideology;
   const want = [];
@@ -125,6 +136,9 @@ function planBuildings(world, s, n, rng) {
   if (countB(world, s, 'temple') < 1 + Math.floor(pop / 26)) want.push(['temple', 5 + (a.faith < 0 ? 3 : 0)]);
   if (countB(world, s, 'healer') < 1 + Math.floor(pop / 22)) want.push(['healer', 6]);
   if (era >= 1 && countB(world, s, 'farm') < Math.ceil(pop / 5)) want.push(['farm', 9]);
+  if (countB(world, s, 'tailor') < 1 && pop >= 4) want.push(['tailor', 6]);
+  if (era >= 1 && countB(world, s, 'coop') < 1 + Math.floor(pop / 25)) want.push(['coop', 5]);
+  if (era >= 1 && countB(world, s, 'well') < 1 && pop > 8) want.push(['well', 3]);
   if (era >= 1 && countB(world, s, 'workshop') < 1 + Math.floor(pop / 30)) want.push(['workshop', 5]);
   if (era >= 1 && countB(world, s, 'kitchen') < 1 + Math.floor(pop / 30)) want.push(['kitchen', 5]);
   if (era >= 2 && countB(world, s, 'barracks') < (a.war < -20 ? 2 : 1) && pop > 12) want.push(['barracks', 3 + (a.war < 0 ? 3 : 0)]);
@@ -135,11 +149,12 @@ function planBuildings(world, s, n, rng) {
   if (era >= 7 && countB(world, s, 'reactor') < 1 && s.capital) want.push(['reactor', 4]);
   if (era >= 8 && countB(world, s, 'shield') < 1) want.push(['shield', 4]);
   if (era >= 9 && countB(world, s, 'launch') < 1 && s.capital) want.push(['launch', 6]);
+  for (let k = want.length - 1; k >= 0; k--) if (!canBuildType(n, want[k][0])) want.splice(k, 1);
   if (!want.length) return;
   // only start what we can afford; remember what we're short of so gatherers go get it
   const affordable = want.filter(([t]) => Object.entries(scaledCost(BUILDINGS[t], era)).every(([r, v]) => (s.stock[r] || 0) >= v));
   const top = want.reduce((a, b) => (b[1] > a[1] ? b : a));
-  s.need = {}; for (const [r, v] of Object.entries(scaledCost(BUILDINGS[top[0]], era))) if ((s.stock[r] || 0) < v) s.need[r] = v - (s.stock[r] || 0);
+  for (const [r, v] of Object.entries(scaledCost(BUILDINGS[top[0]], era))) if ((s.stock[r] || 0) < v) s.need[r] = Math.max(s.need[r] || 0, v - (s.stock[r] || 0));
   if (!affordable.length) return;
   const type = rng.weighted(affordable);
   const b = placeBuildingNear(world, s, type, s.x, s.y, false, Math.max(8, Math.floor(s.radius) + 4));
@@ -156,7 +171,7 @@ function tryBirths(world, s, n, pawns, rng, span) {
     if (!m || m.dead || m.sex !== 'm' || (m.fx.fertility || 0) <= -1 || m.settlementId !== s.id) continue;
     const young = f.children.filter((id) => world.pawns[id] && world.pawns[id].age < 2).length;
     if (young) continue;
-    const chance = 0.1 * (1 + (f.fx.fertility || 0) + (m.fx.fertility || 0) * 0.5) * fert * (s.mood / 55) * (world.age?.id === 'hope' ? 1.3 : 1) * span * 5;
+    const chance = 0.1 * (1 + (f.fx.fertility || 0) + (m.fx.fertility || 0) * 0.5) * fert * (s.mood / 55) * (world.age?.id === 'hope' ? 1.3 : 1) * span * 5 / DAY_LEN;
     if (!rng.chance(chance)) continue;
     const c = createChild(rng, f, m, n.lang);
     c.gearEra = n.era;
@@ -182,9 +197,10 @@ export function stepNation(world, n, dt, rng) {
     n.glitter += Math.min(0.09, 0.04 + temples * 0.005) * dt;
   }
   // era research
-  const next = ERAS[n.era + 1];
-  if (next && n.research >= next.cost) {
-    n.era++;
+  const eraBefore = n.era, done = stepTech(world, n);
+  if (done) logEvent(world, 'research', `${n.name} discovered ${done.name}.`, { nationId: n.id });
+  if (n.era > eraBefore) {
+    const next = ERAS[n.era];
     logEvent(world, 'era', `${n.name} entered the ${next.name}! ${next.blurb}`, { nationId: n.id, big: true });
     emitFx(world, { type: 'era', nationId: n.id, era: n.era });
     const g = pickGovernment(n);
@@ -339,7 +355,7 @@ function unrest(world, n, pawns, rng, avgMood) {
     if (followers.length < 4) return;
     const exile = foundNation(world, site, { ai: true, pop: 0, race: leader.race });
     exile.name = rng.chance(0.5) ? `Free ${nationName(world.rng, n.lang).replace(/^(Tribe of |People of )/, '')}` : `${leader.family} Exiles`;
-    exile.lang = n.lang; exile.era = n.era; exile.research = n.research * 0.85;
+    exile.lang = n.lang; exile.era = n.era; exile.research = n.research * 0.85; exile.techs = { ...(n.techs || {}) }; exile._resSeen = exile.research; initTechs(exile);
     forkCreed(world, n, exile, rng);
     const es = world.settlements[exile.capitalId];
     es.stock.food += 20;
@@ -377,7 +393,7 @@ export function spawnNomads(world, rng) {
   // nomads start a little behind the average era
   const eras = Object.values(world.nations).filter((x) => !x.dead).map((x) => x.era);
   n.era = Math.max(0, Math.floor(eras.reduce((a, b) => a + b, 0) / eras.length) - 1);
-  n.research = ERAS[n.era].cost;
+  n.research = ERAS[n.era].cost; n._resSeen = n.research; initTechs(n);
   for (const p of Object.values(world.pawns)) if (p.nationId === n.id) p.gearEra = n.era;
   logEvent(world, 'nation', `A band of nomads settled the wilds and founded ${n.name}.`, { nationId: n.id, x: site.x, y: site.y });
 }

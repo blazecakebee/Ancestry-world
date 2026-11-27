@@ -52,6 +52,8 @@ export const THOUGHTS = {
   ateRaw: { label: 'Ate raw food', mood: -7, days: 1 },
   ateMeal: { label: 'Ate a cooked meal', mood: 3, days: 1 },
   ateFine: { label: 'Ate a fine meal', mood: 6, days: 1 },
+  newClothes: { label: 'New clothes', mood: 6, days: 4 },
+  naked: { label: 'Nothing to wear', mood: -3, days: 0 },
   ateRation: { label: 'Ate preserved rations', mood: -2, days: 1 },
   hungry: { label: 'Hungry', mood: -6, days: 0.2, situational: true },
   starving: { label: 'Starving', mood: -20, days: 0.2, situational: true },

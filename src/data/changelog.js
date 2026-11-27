@@ -2,6 +2,32 @@
 // tags: 'new' | 'improved' | 'fixed' | 'balance'
 export const CHANGELOG = [
   {
+    version: '0.7.0', date: '2026-11-27', title: 'Items, professions, a research tree and towns that grow up',
+    notes: [
+      ['new', 'Everything drops real goods: trees give logs, rocks give stone, ore gives copper, iron or gold, bushes give berries, apples or bananas by biome, fields grow climate-suited crops (wheat, carrots, corn, tomatoes, cotton and more), cows give red meat and hides, sheep give wool, chickens give poultry and eggs, fish come in two kinds. Cooks turn them into bread, roasts, pastries, meals or rations.'],
+      ['new', 'Goods you can see: carried items float over people, possessed harvests and wild carcasses drop on the ground and haulers fetch them, and the storehouse shows its stock piled in front of it. A Stores list on the right shows everything you own, grouped by kind.'],
+      ['fixed', 'Buildings are no longer free: builders carry the materials to the site first. The placement preview shows what a building costs (red when you are short) and every construction site shows the materials still missing above it.'],
+      ['fixed', 'Mines now work: miners dig stone, copper, iron and the odd gold nugget there endlessly. Possessed mining, chopping and harvesting drop the goods at your feet.'],
+      ['new', 'Professions: every adult specialises in their best skill (Builder, Farmer, Hunter, Miner, Cook, Crafter, Scholar, Doctor, Priest) and sticks to it, while the settlement makes sure every needed trade is covered. Everyone pitches in for food when stores run low.'],
+      ['new', 'Research tree: six technologies per era across all ten eras. Pick what your scholars study; finish four of an era\'s techs and its capstone to enter the next era. Techs boost yields, research, Glitter, mood, healing, construction and movement, and unlock buildings.'],
+      ['new', 'Hide Tailoring: once researched, everyone sews themselves an outfit at the new Tailor, and again whenever a new era brings better clothes.'],
+      ['new', 'New buildings: Tailor, Chicken Coop (daily eggs) and Well.'],
+      ['new', 'Towns grow up with the eras using LimeZu Modern Farm and Modern Exteriors art: tents, barns and farmhouses, then a palace, Victorian streets, a clock-tower town hall, terraced houses, offices, a hospital, school, malls, condos, hangars and an observatory. Shrines are now statues, then an angel, a chapel and finally an animated fountain. Elves and orcs recolour their towns and name their buildings their own way.'],
+      ['new', 'Street furniture appears around settlements by era: hay and crates, then carts and flower beds, then lamps, benches, mailboxes, phone booths, EV chargers and solar panels.'],
+      ['improved', 'The plan menu shows each building\'s picture, what it does, its stats and its cost. Clicking a building opens its own window with materials delivered so far.'],
+      ['new', 'The Nation window is now a Civilization Book (Humble Gift Paper UI): bookmarks for Chronicle, Research, Creed and Diplomacy, your people on the left page, the chapter on the right. The Codex uses the same paper style.'],
+      ['improved', 'Days last four times longer, so people have time to work between nights; needs, ageing, births and crops follow the calendar. At higher speeds creatures now animate faster too, and the simulation keeps up through slow frames.'],
+      ['improved', 'Fewer mental breaks: the risk is judged a few times per calendar day instead of constantly.'],
+      ['fixed', 'A two-person start can no longer be softlocked by an infertile founder.'],
+      ['balance', 'Powers are stronger: bigger brushes, full healing, stronger rain, instant crop blessing, more summoned animals, harder-hitting smites, and buffs that last real days.'],
+      ['fixed', 'Clicking a citizen now uses the exact area their sprite covers.'],
+      ['improved', 'Animals are smaller and far fewer. Kinds without their own sprite (wolves, bears, deer, boars, camels, elephants, mammoths, songbirds) and their powers are gone; foxes now live wild in forests.'],
+      ['fixed', 'Chickens no longer flicker or show stray text: the broken rooster sheets were removed.'],
+      ['fixed', 'Flags no longer flicker in menus (the same flag picture was being moved between windows).'],
+      ['fixed', 'Stray pumpkins no longer appear in the grass.'],
+    ],
+  },
+  {
     version: '0.6.0', date: '2026-11-27', title: 'Creeds, bigger worlds, 31 new powers and a new Codex',
     notes: [
       ['new', 'Creeds replace Divine Will: every nation holds a few Ideals (Spiritual, Pacifist, Industrialist, Stewardship...), six Precepts (war, toil, land, the dead, outsiders, knowledge) and rites it performs on its own. Certainty rises and falls with prophets, temples and happiness; low certainty brings doubt, conversion to rival creeds, or a schism. Revelation restores certainty and lets you reform at once.'],

@@ -59,9 +59,7 @@ const NEW = [
   // ---- Creatures ----
   { id: 'dog', name: 'Faithful Hounds', tier: 1, cost: 10, cd: 1, target: 'tile', cat: 'wild', color: '#c8a070', radius: 3, icon: 'va:buff_11', desc: 'One or two friendly dogs appear.' },
   { id: 'cat', name: 'Hearth Cats', tier: 1, cost: 8, cd: 1, target: 'tile', cat: 'wild', color: '#e8b070', radius: 3, icon: 'rv:363', desc: 'One or two friendly cats appear.' },
-  { id: 'birds', name: 'Songbirds', tier: 1, cost: 8, cd: 1, target: 'tile', cat: 'wild', color: '#9fd8ff', radius: 3, icon: 'va:buff_9', desc: 'A small flock of songbirds. Cheers nearby citizens.' },
   { id: 'sheepflock', name: 'Flock of Sheep', tier: 1, cost: 16, cd: 2, target: 'tile', cat: 'farm', color: '#f0f0e0', radius: 3, icon: 'va:buff_12', desc: 'Three to five sheep appear.' },
-  { id: 'deerherd', name: 'Deer Herd', tier: 1, cost: 18, cd: 2, target: 'tile', cat: 'wild', color: '#c89868', radius: 3, icon: 'va:buff_15', desc: 'Three to five deer appear: good hunting.' },
   { id: 'fishshoal', name: 'Shoal of Fish', tier: 1, cost: 14, cd: 2, target: 'tile', cat: 'wild', color: '#6fc8ff', radius: 2, icon: 'rv:361', desc: 'Call fish to water near one of your settlements; the catch fills its larders.' },
   { id: 'slime_green', name: 'Green Slime', tier: 1, cost: 12, cd: 1, target: 'tile', cat: 'wild', color: '#62e06a', radius: 3, icon: 'rv:675', desc: 'Harmless-ish green slimes. Fight back only if attacked.' },
   { id: 'slime_blue', name: 'Blue Slime', tier: 1, cost: 12, cd: 1, target: 'tile', cat: 'wild', color: '#5fa8ff', radius: 3, icon: 'rv:596', desc: 'Calm blue slimes that shimmer in the sun.' },
@@ -75,8 +73,6 @@ const NEW = [
   { id: 'fox', name: 'Cunning Foxes', tier: 2, cost: 14, cd: 2, target: 'tile', cat: 'wild', color: '#ff8a40', radius: 3, icon: 'va:buff_13', desc: 'One or two skittish foxes.' },
   { id: 'slime_red', name: 'Red Slime', tier: 2, cost: 22, cd: 2, target: 'tile', cat: 'wild', color: '#ff5a5a', radius: 3, icon: 'rv:129', desc: 'Warm, stubborn red slimes. Hit back a little harder when attacked.' },
   { id: 'wisp', name: 'Wisp Spirit', tier: 2, cost: 35, cd: 4, target: 'tile', cat: 'wild', color: '#bff0ff', radius: 3, icon: 'va:mana_replenish', desc: 'A drifting wisp that sheds glitter on those who catch it.' },
-  { id: 'wolfpack', name: 'Wolf Pack', tier: 2, cost: 40, cd: 5, target: 'tile', cat: 'wild', color: '#9aa0b0', radius: 3, icon: 'va:buff_10', desc: 'Two or three wolves. They spare your own people.' },
-  { id: 'bear', name: 'Mountain Bear', tier: 2, cost: 55, cd: 6, target: 'tile', cat: 'wild', color: '#8a6040', radius: 3, icon: 'va:buff_16', desc: 'A lone bear. It spares your own people.' },
   // ---- War ----
   { id: 'fervor', name: 'Battle Fervor', tier: 2, cost: 50, cd: 5, target: 'tile', cat: 'war', color: '#ff7a4a', radius: 5, icon: 'rv:156', desc: 'Everyone nearby fights harder for a day and a half.' },
   { id: 'aegis', name: 'Aegis Ward', tier: 2, cost: 55, cd: 6, target: 'tile', cat: 'war', color: '#7fb8ff', radius: 4, icon: 'rv:597', desc: 'Everyone nearby takes 35% less damage for a day and a half.' },
@@ -114,10 +110,6 @@ const MORE = [
   { id: 'muse', name: 'Muse', tier: 1, cost: 22, cd: 4, target: 'pawn', cat: 'life', color: '#ffb0e8', radius: 1, icon: 'rv:296', desc: 'A flash of artistry: creative inspiration and artistic skill.' },
   { id: 'manna', name: 'Manna', tier: 2, cost: 55, cd: 6, target: 'settlement', cat: 'life', color: '#fff0c0', radius: 0, icon: 'at:rations', desc: 'Bread falls from the sky: a generous gift of food to a settlement.' },
   // ---- Wild ----
-  { id: 'boar', name: 'Wild Boar', tier: 1, cost: 14, cd: 1, target: 'tile', cat: 'wild', color: '#a0705a', radius: 3, icon: 'rv:233', desc: 'A few boars rooting in the undergrowth. Dangerous, but good hunting.' },
-  { id: 'camel', name: 'Camels', tier: 2, cost: 20, cd: 2, target: 'tile', cat: 'wild', color: '#d8b070', radius: 3, icon: 'rv:203', desc: 'Desert wanderers: tough, patient beasts of burden.' },
-  { id: 'elephant', name: 'Elephants', tier: 2, cost: 50, cd: 4, target: 'tile', cat: 'wild', color: '#b0b0b8', radius: 3, icon: 'rv:216', desc: 'A gentle giant or two. Mighty when angered.' },
-  { id: 'mammoth', name: 'Woolly Mammoth', tier: 2, cost: 60, cd: 5, target: 'tile', cat: 'wild', color: '#8a6a50', radius: 3, icon: 'rv:316', desc: 'Ice-age giants for the cold north.' },
   // ---- War ----
   { id: 'warhorn', name: 'War Horn', tier: 1, cost: 28, cd: 4, target: 'tile', cat: 'war', color: '#ffb060', radius: 6, icon: 'rv:126', desc: 'A horn call: allies nearby move faster and fight harder for a short while.' },
   { id: 'thunderclap', name: 'Thunderclap', tier: 2, cost: 55, cd: 5, target: 'tile', cat: 'war', color: '#d0d8ff', radius: 3, icon: 'rv:178', desc: 'A deafening crack knocks back and unnerves enemies at war with you.' },
@@ -139,6 +131,7 @@ const MORE = [
   { id: 'volcano', name: 'Volcano', tier: 3, cost: 330, cd: 20, target: 'tile', cat: 'world', color: '#ff5a2a', radius: 3, icon: 'at:fire', desc: 'A volcano bursts through the ground, scorching the land around it into ashlands.' },
 ];
 
+for (const P of [...CORE, ...NEW, ...MORE]) if (P.target === 'tile' && P.radius >= 2) P.radius = Math.round(P.radius * 1.35); // bigger brushes: miracles should feel like miracles
 export const POWERS = [...CORE, ...NEW, ...MORE].sort((a, b) => a.tier - b.tier);
 export const POWER_CATS = [
   ['divine', 'Divine'], ['nature', 'Nature'], ['life', 'Life'], ['farm', 'Farm'], ['wild', 'Wild'], ['war', 'War'], ['curses', 'Curses'], ['world', 'World'],

@@ -11,6 +11,7 @@ import { RACES } from '../data/races.js';
 import { PARTS, DISEASES } from '../sim/health.js';
 import { relationLabel, fullName } from '../sim/pawn.js';
 import { dateString } from '../sim/world.js';
+import { DAY_LEN, fmtSpan } from '../core/time.js';
 import { WORLD_AGES } from '../sim/events.js';
 import { STORM_NAMES, cellAt, tempAt } from '../world/atmosphere.js';
 import { PERMS, tierOf } from '../sim/commands.js';
@@ -24,6 +25,9 @@ import { PW, PH, DIR } from '../render/charpack.js';
 import { saveSettings } from './settings.js';
 import { creedPanel } from './creedui.js';
 import { FW, FH } from '../render/pawnart.js';
+import { openBuildMenu as econBuildMenu, StoresPanel, openBuildingWindow, researchPanel, workName, bookSpread, civPage, chroniclePage } from './econui.js';
+import { TECH } from '../data/tech.js';
+import { WORKS } from '../sim/ai.js';
 
 const RES_ICON = { food: 'food', meals: 'meals', rations: 'rations', wood: 'wood', stone: 'stone', metal: 'metal', cloth: 'cloth', medicine: 'medicine' };
 const OVERLAYS = [['none', 'None', 'globe'], ['borders', 'Borders', 'flag'], ['ideology', 'Ideology', 'scroll'], ['glitter', 'Glitter devotion', 'glitter'], ['trade', 'Trade routes', 'map'], ['race', 'Races', 'users'], ['weather', 'Weather', 'storm'], ['wind', 'Wind', 'wind'], ['temperature', 'Temperature', 'sun'], ['pressure', 'Pressure', 'warning'], ['humidity', 'Humidity', 'rain'], ['pollution', 'Pollution', 'skull']];
@@ -97,7 +101,7 @@ export class HUD {
       this.nationPill,
       h('div', { class: 'glass pill', tip: 'Glitter: earned when your people admire and worship you. Spend it on powers. Lifetime devotion unlocks higher tiers.' }, iconImg('glitter'), this.glitterEl),
       h('div', { class: 'glass pill', tip: 'Population of your nation' }, iconImg('pop'), this.popEl),
-      h('div', { class: 'glass pill', tip: 'Era & research progress toward the next age' }, iconImg('research'), this.eraEl),
+      h('div', { class: 'glass pill', style: { cursor: 'pointer' }, onclick: () => this.me && this.openNation(this.me.id, 'research'), tip: 'Era & current research — click to open the research tree' }, iconImg('research'), this.eraEl),
       h('div', { class: 'grow' }),
       h('div', { class: 'glass pill' }, this.weatherEl),
       h('div', { class: 'glass pill' }, this.clockEl, this.ageEl),
@@ -115,6 +119,7 @@ export class HUD {
         tool('possess', 'possess', 'Possess', 'F', 'Possess a citizen<br>Select one of your people, then take control (WASD to move, F to act, R to release)', () => app.possessSelected()),
         tool('overlay', 'map', 'Layers', 'F1', 'Map overlays <span class="kbd">F1–F10</span>', () => this.toggleOverlayMenu()),
         h('div', { class: 'sep' }),
+        tool('research', 'research', 'Research', 'T', 'Research tree <span class="kbd">T</span><br>Choose what your scholars study', () => this.me && this.openNation(this.me.id, 'research')),
         tool('nation', 'flag', 'Nation', 'N', 'Nation <span class="kbd">N</span>', () => this.me && this.openNation(this.me.id)),
         tool('space', 'rocket', 'Space', '', 'Offworld & space', () => this.openSpace()),
         tool('codex', 'book', 'Codex', 'C', 'Codex <span class="kbd">C</span>', () => showCodex()),
@@ -129,6 +134,7 @@ export class HUD {
     // Focus: appears once you zoom out or drift away; flies the camera back to your capital
     this.focusBtn = h('button', { class: 'btn primary focus-btn hidden', tip: 'Back to your settlement <span class="kbd">H</span>', onclick: () => this.focusHome() }, iconImg('house', 2, 'px-icon sm'), 'Focus');
     this.root.append(this.focusBtn);
+    this.stores = new StoresPanel(this); this.root.append(this.stores.el);
     this.root.append(h('div', { class: 'hud-bottom' }, this.powerBar), this.possessBar, this.modeChip);
     this.buildPowers();
     // ---- right: players + notifications ----
@@ -169,7 +175,7 @@ export class HUD {
       if (lastTier) kids.push(h('div', { class: 'tier-sep' }));
       lastTier = T.tier;
       for (const p of list) {
-        const el = h('div', { class: `power ${tier < p.tier ? 'locked' : ''}`, onclick: () => this.app.armPower(p.id), tip: `<b>${p.name}</b> <span class="muted">· Tier ${p.tier}</span><br>${p.desc}<br><span style="color:var(--accent)">✦ ${p.cost} Glitter</span> · ${p.cd} day cooldown${p.minEra ? `<br>Requires ${ERAS[p.minEra].name}` : ''}${tier < p.tier ? `<br><i>Unlocks at ${T.devotion} lifetime devotion</i>` : ''}` },
+        const el = h('div', { class: `power ${tier < p.tier ? 'locked' : ''}`, onclick: () => this.app.armPower(p.id), tip: `<b>${p.name}</b> <span class="muted">· Tier ${p.tier}</span><br>${p.desc}<br><span style="color:var(--accent)">✦ ${p.cost} Glitter</span> · ${fmtSpan(p.cd)} cooldown${p.minEra ? `<br>Requires ${ERAS[p.minEra].name}` : ''}${tier < p.tier ? `<br><i>Unlocks at ${T.devotion} lifetime devotion</i>` : ''}` },
           iconImg(p.icon), h('span', { class: 'cost' }, p.cost), tier < p.tier ? h('span', { class: 'lock' }, '🔒') : null, h('div', { class: 'cd' }));
         if (p.color) el.style.setProperty('--pc', p.color);
         this.powerEls[p.id] = el; kids.push(el);
@@ -209,9 +215,10 @@ export class HUD {
 
   // ---------- periodic refresh ----------
   update() {
+    this.stores?.update();
     const w = this.w, app = this.app, n = this.me;
     this.updateFocusBtn();
-    const d = dateString(w.time), cx = app.renderer.cam.x, lt = ((w.time + cx / w.W - 0.5) % 1 + 1) % 1, hr = Math.floor(lt * 24);
+    const d = dateString(w.time), cx = app.renderer.cam.x, lt = ((w.time / DAY_LEN + cx / w.W - 0.5) % 1 + 1) % 1, hr = Math.floor(lt * 24);
     this.setHTML(this.clockEl, `<b>Year ${d.year}</b><span>${d.season} · Day ${d.day} · ${String(hr).padStart(2, '0')}:${String(Math.floor((lt * 24 % 1) * 60 / 15) * 15).padStart(2, '0')} ${hr >= 6 && hr < 19 ? '☀' : '☾'}</span>`);
     const age = WORLD_AGES[w.age?.id]; this.ageEl.textContent = age ? age.name : ''; if (age) { this.ageEl.style.color = age.color; this.ageEl.dataset.tip = age.desc; }
     if (this._paused !== w.paused) { this._paused = w.paused; this.pauseBtn.replaceChildren(iconImg(w.paused ? 'play' : 'pause', 2, 'px-icon sm')); } this.pauseBtn.classList.toggle('active', w.paused);
@@ -225,7 +232,7 @@ export class HUD {
       const tier = tierOf(n), next = TIERS[tier];
       this.setHTML(this.glitterEl, `<b>${fmtNum(n.glitter)}</b><span>Tier ${tier}${next ? ` · ${fmtNum(n.devotion)}/${next.devotion}` : ' · max'}</span>`);
       const nx = ERAS[n.era + 1];
-      this.setHTML(this.eraEl, `<b>${ERAS[n.era].name}</b><span>${nx ? `${Math.floor((n.research / nx.cost) * 100)}% to ${nx.name}` : 'Final era'}</span>`);
+      const ct = TECH[n.techCur]; this.setHTML(this.eraEl, `<b>${ERAS[n.era].name}</b><span>${ct ? `${ct.name} ${Math.floor(((n.techProg || 0) / ct.cost) * 100)}%` : nx ? 'Choose research' : 'Final era'}</span>`);
       { const k = n.id + '|' + n.name + '|' + n.government + '|' + JSON.stringify(n.flag); if (k !== this._pillKey) { this._pillKey = k; this.nationPill.replaceChildren(flagCanvas(n.flag, 24, 16), h('div', { class: 'stat' }, h('b', {}, n.name), h('span', {}, GOVERNMENTS.find((g) => g.id === n.government)?.name || ''))); } }
       if (tier !== this.tierShown) { this.buildPowers(); this.notify({ title: `Devotion deepens: Tier ${tier} powers unlocked!`, sev: 'success', icon: 'glitter', sound: 'era' }); }
       for (const p of POWERS) {
@@ -347,17 +354,8 @@ export class HUD {
     this.overlayMenu = h('div', { class: 'glass overlay-menu' }, OVERLAYS.map(([id, label, icon]) => h('button', { class: `btn sm ${r.overlay === id ? 'active' : ''}`, style: { justifyContent: 'flex-start' }, onclick: () => { this.app.setOverlay(id); this.toggleOverlayMenu(); } }, iconImg(icon, 2, 'px-icon sm'), label)));
     this.root.append(this.overlayMenu);
   }
-  openBuildMenu() {
-    const n = this.me; if (!n) return toast('Choose a tribe first', { sound: 'error' });
-    const body = h('div', { class: 'grid-2' }, BUILD_ORDER.filter((t) => t !== 'center').map((t) => {
-      const def = BUILDINGS[t], ok = def.era <= n.era;
-      const cost = scaledCost(def, n.era);
-      return h('div', { class: `card ${ok ? 'pick' : ''}`, style: { opacity: ok ? 1 : 0.4 }, onclick: () => { if (!ok) return; m.close(); this.app.startPlacing(t); } },
-        h('b', {}, buildingName(t, n.era)), h('div', { class: 'tiny muted' }, ok ? `${def.w}×${def.h} · ${Object.entries(cost).map(([r, v]) => `${v} ${r}`).join(', ') || 'free'}` : `Unlocks in the ${ERAS[def.era].name}`),
-        h('div', { class: 'tiny', style: { marginTop: '4px' } }, describeBuilding(t)));
-    }));
-    const m = modal('Plan a building', h('div', { class: 'col' }, h('p', { class: 'small muted' }, 'Choose a building, then click inside your territory to place the plan. Your citizens gather materials and build it themselves. Right-click or Esc to cancel.'), body), { icon: iconImg('plan'), width: '640px' });
-  }
+  openBuildMenu() { econBuildMenu(this); }
+
 
   // ---------- inspectors ----------
   portrait(p, scale = 3) {
@@ -387,6 +385,7 @@ export class HUD {
           h('div', { class: 'small muted' }, `${RACES[p.race || 'human'].adj} ${p.sex === 'f' ? 'woman' : 'man'} · ${Math.floor(p.age)} years · ${p.role}`),
           h('div', { class: 'small' }, n ? h('a', { href: '#', onclick: (e) => { e.preventDefault(); this.openNation(n.id); } }, n.name) : 'Wanderer', s ? ` · ${s.name}` : ''),
           h('div', { class: 'small', style: { color: 'var(--accent)' } }, activity(p)),
+          p.work && p.age >= 14 ? h('div', { class: 'small', tip: WORKS[p.work]?.desc || '' }, iconImg(WORKS[p.work]?.icon || 'hammer', 1, 'px-icon xs'), ` ${workName(p)}`, h('span', { class: 'muted' }, ` · ${WORKS[p.work] ? `best at ${WORKS[p.work].skill}` : ''}`)) : null,
           h('div', { class: 'row wrap', style: { marginTop: '4px' } },
             mine && !p.dead ? (p.possessedBy === app.session.pid ? h('button', { class: 'btn sm active', onclick: () => app.release() }, iconImg('possess', 2, 'px-icon sm'), 'Release') : h('button', { class: 'btn sm primary', onclick: () => app.possess(p.id) }, iconImg('possess', 2, 'px-icon sm'), 'Possess')) : null,
             h('button', { class: `btn sm ${app.renderer.pins.has(p.id) ? 'active' : ''}`, onclick: () => app.togglePin(p.id), tip: 'Pin: show a marker over them and alert on death' }, iconImg('pin', 2, 'px-icon sm'), app.renderer.pins.has(p.id) ? 'Pinned' : 'Pin'),
@@ -443,16 +442,13 @@ export class HUD {
         h('b', {}, 'Stores'), h('div', { class: 'grid-2' }, RESOURCES.map((r) => h('div', { class: 'row small' }, iconImg(RES_ICON[r], 2, 'px-icon sm'), h('span', { class: 'grow' }, RES_LABEL[r]), h('b', {}, fmtNum(s.stock[r] || 0))))),
         s.until?.shield > w.time ? h('div', { class: 'chip', style: { color: 'var(--info)' } }, 'Under divine shield') : null,
         h('div', { class: 'row' }, h('b', { class: 'grow' }, 'Buildings'), canPlan ? h('button', { class: 'btn sm primary', onclick: () => this.openBuildMenu() }, iconImg('plan', 2, 'px-icon sm'), 'Plan') : null),
-        h('div', {}, blds.map((b) => h('div', { class: 'thought', style: { cursor: 'pointer' }, onclick: () => app.renderer.focus(b.x + b.w / 2, b.y + b.h / 2, Math.max(app.renderer.cam.tz, 40)) }, h('span', {}, buildingName(b.type, b.era ?? 0)), h('span', { class: b.built ? 'muted' : 'neg' }, b.built ? '' : `building ${Math.round(b.progress * 100)}%`)))),
+        h('div', {}, blds.map((b) => h('div', { class: 'thought', style: { cursor: 'pointer' }, onclick: () => app.renderer.focus(b.x + b.w / 2, b.y + b.h / 2, Math.max(app.renderer.cam.tz, 40)) }, h('span', {}, buildingName(b.type, b.era ?? 0, n?.race)), h('span', { class: b.built ? 'muted' : 'neg' }, b.built ? '' : `building ${Math.round(b.progress * 100)}%`)))),
         h('b', {}, 'People'), h('div', { class: 'row wrap' }, pawns.slice(0, 60).map((p) => h('button', { class: 'btn sm', onclick: () => this.openPawn(p.id) }, p.name))),
       );
     }, { x: innerWidth - 790, y: 90, w: 420, h: 560, icon: iconImg('house') });
   }
 
-  openBuilding(id) {
-    const w = this.w, b = w.buildings[id]; if (!b) return;
-    this.openSettlement(b.sid);
-  }
+  openBuilding(id) { if (this.w.buildings[id]) openBuildingWindow(this, id); }
 
   openAnimal(id) {
     const a = this.w.animals[id]; if (!a) return;
@@ -460,10 +456,10 @@ export class HUD {
     toast(`${A.name}${a.dead ? ' (dead)' : ''} · ${A.predator ? 'predator' : 'wild'} · ${Math.max(0, Math.round(a.hp ?? A.hp))} hp`);
   }
 
-  openNation(id) {
-    let tab = 'overview';
+  openNation(id, startTab) {
+    let tab = startTab || 'overview';
     const app = this.app;
-    openWindow('nation', 'Nation', (body, win) => {
+    const win = openWindow('nation', 'Nation', (body, win) => {
       const w = this.w, n = w.nations[id];
       if (!n) return h('p', {}, 'Gone.');
       win.setTitle(n.name);
@@ -472,17 +468,7 @@ export class HUD {
       const leader = w.pawns[n.leaderId];
       const owner = n.ownerId ? w.players[n.ownerId] : null;
       const content = h('div', { class: 'col' });
-      if (tab === 'overview') {
-        const nx = ERAS[n.era + 1], tier = tierOf(n), nt = TIERS[tier];
-        add(content, 
-          h('div', { class: 'row' }, (() => { const c = flagCanvas(n.flag, 48, 32); c.style.width = '96px'; c.style.height = '64px'; c.style.imageRendering = 'pixelated'; c.style.borderRadius = '6px'; return c; })(),
-            h('div', { class: 'col', style: { gap: '3px' } }, h('h3', {}, n.name), h('span', { class: 'small muted' }, `${RACES[n.race || 'human'].name} · ${GOVERNMENTS.find((g) => g.id === n.government)?.name}`), h('span', { class: 'small' }, owner ? `Patron deity: ${owner.name}` : 'Guided by fate (AI)'), mine ? h('button', { class: 'btn sm', onclick: () => showFlagEditor(app, n) }, iconImg('flag', 2, 'px-icon sm'), 'Edit flag & name') : null)),
-          h('div', { class: 'kv' }, h('dt', {}, 'Leader'), h('dd', {}, leader ? h('a', { href: '#', onclick: (e) => { e.preventDefault(); this.openPawn(leader.id); } }, fullName(leader)) : '—'), h('dt', {}, 'Population'), h('dd', {}, pawns.length), h('dt', {}, 'Settlements'), h('dd', {}, Object.values(w.settlements).filter((s) => s.nationId === n.id).length), h('dt', {}, 'Stability'), h('dd', {}, bar(n.stability / 100, n.stability < 30 ? 'bad' : 'good'))),
-          h('b', {}, `Era: ${ERAS[n.era].name}`), nx ? h('div', {}, bar(n.research / nx.cost), h('div', { class: 'tiny muted' }, `${fmtNum(n.research)} / ${fmtNum(nx.cost)} research → ${nx.name}`)) : h('div', { class: 'small muted' }, 'Your people have reached the stars.'),
-          mine ? h('div', {}, h('b', {}, `Devotion tier ${tier}`), nt ? bar(n.devotion / nt.devotion) : null, h('div', { class: 'tiny muted' }, nt ? `${fmtNum(n.devotion)} / ${nt.devotion} lifetime Glitter to unlock ${nt.name}` : 'All powers unlocked')) : null,
-          h('div', { class: 'small muted' }, `Births ${n.stats.births} · Deaths ${n.stats.deaths} · Miracles ${n.stats.miracles}`),
-        );
-      }
+      if (tab === 'research') add(content, researchPanel(app, w, n, mine));
       if (tab === 'will') {
         add(content, creedPanel(app, w, n, mine));
         if (mine) add(content, h('b', {}, 'Decrees'),
@@ -512,10 +498,12 @@ export class HUD {
         for (const pl of others) add(content, h('div', { class: 'card col' }, h('b', {}, pl.name), ...Object.entries(PERMS).map(([k, label]) => h('label', { class: 'row small' }, h('input', { type: 'checkbox', checked: !!n.perms?.[pl.id]?.[k], onchange: (e) => app.session.command({ type: 'perm', player: pl.id, key: k, value: e.target.checked }) }), label))));
       }
       const cmd = async (c) => { const r = await app.session.command(c); if (!r.ok) toast(r.msg || 'Refused', { sound: 'error' }); else if (r.msg) toast(r.msg); };
-      const tabList = [['overview', 'Overview'], ['will', mine ? 'Creed & Will' : 'Creed'], ['diplo', 'Diplomacy']];
-      if (mine && app.session.mode !== 'single') tabList.push(['perms', 'Permissions']);
-      return h('div', { class: 'col' }, tabs(tabList, tab, (t) => { tab = t; win.update(); }), content);
-    }, { x: 70, y: 60, w: 680, h: 780, icon: iconImg('flag') });
+      const tabList = [['overview', 'Chronicle', 'scroll'], ['research', 'Research', 'research'], ['will', mine ? 'Creed & Will' : 'Creed', 'dove'], ['diplo', 'Diplomacy', 'users']];
+      if (mine && app.session.mode !== 'single') tabList.push(['perms', 'Permissions', 'lock']);
+      if (tab === 'overview') add(content, chroniclePage(w, n, pawns));
+      return bookSpread(tabList, tab, (t) => { tab = t; win.update(); }, civPage(this, w, n, pawns, leader, owner, mine), tabList.find((t) => t[0] === tab)?.[1] || '', content);
+    }, { x: Math.max(10, innerWidth / 2 - 520), y: 56, w: 1040, h: Math.min(760, innerHeight - 80), icon: iconImg('flag') });
+    win.el.classList.add('book-win');
   }
 
   openSpace() {

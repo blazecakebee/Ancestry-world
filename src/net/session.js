@@ -6,6 +6,7 @@ import { Game } from '../sim/game.js';
 import { generateWorld } from '../world/worldgen.js';
 import { createAtmosphere } from '../world/atmosphere.js';
 import { RNG } from '../core/rng.js';
+import { YEAR_LEN } from '../core/time.js';
 import { pawnCard, pawnFast, pawnDetail, tileRecord, applyTileRecord, atmoPacket, applyAtmo, applyFast, mapStrip, strip } from './serialize.js';
 import { computeFx } from '../sim/pawn.js';
 import { PeerSocket } from './peersocket.js';
@@ -125,7 +126,7 @@ export class Session extends EventBus {
   }
   slowState() {
     const w = this.world;
-    return { nations: mapStrip(w.nations), settlements: mapStrip(w.settlements), buildings: mapStrip(w.buildings), players: w.players, space: w.space, squads: mapStrip(w.squads || {}) };
+    return { nations: mapStrip(w.nations), settlements: mapStrip(w.settlements), buildings: mapStrip(w.buildings), players: w.players, space: w.space, squads: mapStrip(w.squads || {}), drops: mapStrip(w.drops || {}) };
   }
   /** Animals a player can plausibly see (their camera plus a margin); wildlife is plentiful, so never ship the whole planet. */
   animalsFor(pid) {
@@ -177,7 +178,7 @@ export class Session extends EventBus {
     const tiles = generateWorld(m.seed, m.W, m.H);
     for (const r of m.tiles) applyTileRecord(tiles, r);
     const atmo = createAtmosphere(tiles); applyAtmo(atmo, m.atmo);
-    const w = { version: 1, name: m.name, seed: m.seed, W: m.W, H: m.H, time: m.time, yearLen: 12, tick: 0, speed: m.speed, paused: m.paused, tiles, atmo,
+    const w = { version: 1, name: m.name, seed: m.seed, W: m.W, H: m.H, time: m.time, yearLen: YEAR_LEN, tick: 0, speed: m.speed, paused: m.paused, tiles, atmo,
       nations: {}, settlements: {}, buildings: {}, pawns: m.pawns, animals: m.animals || {}, squads: {}, players: {}, space: [], log: m.log || [], fx: [], age: m.age,
       nextId: {}, rng: new RNG(1), waterActive: new Set(), fireActive: new Set(), dirty: new Set(), hot: new Set(), cameraHints: {}, settings: m.settings, hostId: m.hostId };
     Object.assign(w, m.state);
@@ -196,7 +197,7 @@ export class Session extends EventBus {
     if (m.water) { for (const i of w.waterActive) w.tiles.water[i] = 0; w.waterActive = new Set(); for (const [i, v] of m.water) { w.tiles.water[i] = v / 100; w.waterActive.add(i); } }
     if (m.fire) { for (const i of w.fireActive) w.tiles.fire[i] = 0; w.fireActive = new Set(); for (const [i, v] of m.fire) { w.tiles.fire[i] = v; w.fireActive.add(i); } }
     if (m.animals) { const next = {}; for (const r of m.animals) { const a = w.animals[r[0]] || { id: r[0] }; a.kind = r[1]; a.x = r[2] / 100; a.y = r[3] / 100; a.facing = r[4]; a.dead = !!r[5]; a.moving = !!r[6]; a.baby = r[7] || 0; next[r[0]] = a; } w.animals = next; }
-    for (const k of ['nations', 'settlements', 'buildings', 'players', 'space', 'squads']) if (m[k]) w[k] = m[k];
+    for (const k of ['nations', 'settlements', 'buildings', 'players', 'space', 'squads', 'drops']) if (m[k]) w[k] = m[k];
     if (m.atmo) applyAtmo(w.atmo, m.atmo);
     if (m.log?.length) { w.log.push(...m.log); if (w.log.length > 300) w.log.splice(0, w.log.length - 300); }
     if (m.fx?.length) w.fx.push(...m.fx); if (w.fx.length > 400) w.fx.splice(0, w.fx.length - 400);
