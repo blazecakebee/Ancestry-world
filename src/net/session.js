@@ -127,6 +127,17 @@ export class Session extends EventBus {
     const w = this.world;
     return { nations: mapStrip(w.nations), settlements: mapStrip(w.settlements), buildings: mapStrip(w.buildings), players: w.players, space: w.space, squads: mapStrip(w.squads || {}) };
   }
+  /** Animals a player can plausibly see (their camera plus a margin); wildlife is plentiful, so never ship the whole planet. */
+  animalsFor(pid) {
+    const w = this.world, h = w.cameraHints?.[pid], out = [];
+    if (!h || h.zoom < 1.6) return out;                     // globe / far map view: no individual animals are drawn
+    const R = Math.min(120, 40 + 2400 / Math.max(6, h.zoom));
+    for (const a of Object.values(w.animals)) {
+      if (Math.abs(a.y - h.y) > R) continue; let d = Math.abs(a.x - h.x); if (d > w.W / 2) d = w.W - d; if (d > R) continue;
+      out.push([a.id, a.kind, Math.round(a.x * 100), Math.round(a.y * 100), a.facing, a.dead ? 1 : 0, a.moving ? 1 : 0, a.baby ? 1 : 0]);
+    }
+    return out;
+  }
   broadcast() {
     const w = this.world; this.snapN++;
     const ids = new Set(Object.keys(w.pawns).map(Number));
@@ -136,7 +147,7 @@ export class Session extends EventBus {
     const water = this.snapN % 5 === 0 ? [...w.waterActive].slice(0, 4000).map((i) => [i, Math.round(w.tiles.water[i] * 100)]) : null;
     const fire = [...w.fireActive].slice(0, 3000).map((i) => [i, w.tiles.fire[i]]);
     const common = { t: 'snap', time: w.time, speed: w.speed, paused: w.paused, age: w.age, fast: Object.values(w.pawns).map(pawnFast), gone, tiles, water, fire,
-      animals: Object.values(w.animals).map((a) => [a.id, a.kind, Math.round(a.x * 100), Math.round(a.y * 100), a.facing, a.dead ? 1 : 0, a.moving ? 1 : 0]) };
+      animals: null };
     if (this.snapN % 5 === 0) Object.assign(common, this.slowState());
     if (this.snapN % 10 === 0) common.atmo = atmoPacket(w.atmo);
     const all = Object.values(w.pawns);
@@ -148,7 +159,7 @@ export class Session extends EventBus {
       const details = peer.watch.map((id) => w.pawns[id]).filter(Boolean).map(pawnDetail);
       const log = w.log.filter((e) => e.id >= peer.logId); if (log.length) peer.logId = log[log.length - 1].id + 1;
       const fx = w.fx.filter((e) => e.t > peer.fxT); if (fx.length) peer.fxT = fx[fx.length - 1].t;
-      this.sendTo(wsId, { ...common, cards: cards.concat(rot), details, log, fx });
+      this.sendTo(wsId, { ...common, animals: this.animalsFor(peer.pid), cards: cards.concat(rot), details, log, fx });
     }
   }
 
@@ -184,7 +195,7 @@ export class Session extends EventBus {
     for (const r of m.tiles || []) changed.add(applyTileRecord(w.tiles, r));
     if (m.water) { for (const i of w.waterActive) w.tiles.water[i] = 0; w.waterActive = new Set(); for (const [i, v] of m.water) { w.tiles.water[i] = v / 100; w.waterActive.add(i); } }
     if (m.fire) { for (const i of w.fireActive) w.tiles.fire[i] = 0; w.fireActive = new Set(); for (const [i, v] of m.fire) { w.tiles.fire[i] = v; w.fireActive.add(i); } }
-    if (m.animals) { const next = {}; for (const r of m.animals) { const a = w.animals[r[0]] || { id: r[0] }; a.kind = r[1]; a.x = r[2] / 100; a.y = r[3] / 100; a.facing = r[4]; a.dead = !!r[5]; a.moving = !!r[6]; next[r[0]] = a; } w.animals = next; }
+    if (m.animals) { const next = {}; for (const r of m.animals) { const a = w.animals[r[0]] || { id: r[0] }; a.kind = r[1]; a.x = r[2] / 100; a.y = r[3] / 100; a.facing = r[4]; a.dead = !!r[5]; a.moving = !!r[6]; a.baby = r[7] || 0; next[r[0]] = a; } w.animals = next; }
     for (const k of ['nations', 'settlements', 'buildings', 'players', 'space', 'squads']) if (m[k]) w[k] = m[k];
     if (m.atmo) applyAtmo(w.atmo, m.atmo);
     if (m.log?.length) { w.log.push(...m.log); if (w.log.length > 300) w.log.splice(0, w.log.length - 300); }

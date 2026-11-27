@@ -16,6 +16,8 @@ Also available in-game: **Main menu → What's New**.
 - **New:** A Focus button appears when you zoom out or wander far from home. Click it (or press H) to fly back to your settlement.
 - **Fixed:** Pine trees no longer carry a loose trunk or stump piece beside them (the "half-cut" trees), and the clothesline sheets are gone for good.
 - **Improved:** Boulders, ore veins and berry bushes now reuse the pack's own rocks and bushes (with fruit dots and ore flecks added), so they match the trees. Stray pumpkins no longer sprout in the grass.
+- **New:** Living wildlife: the whole planet is now seeded with herds by biome (cattle, horses, sheep, goats, pigs, junglefowl, ducks, rabbits, wolves and boar). They graze, breed (young are smaller until grown), age and die, stay below a per-species cap, and migrants refill hunted-out regions. Previously only a few animals appeared near settlements.
+- **Improved:** Every animal now wears the Modern Farm sprites (wolves, boar, deer, camels, elephants and mammoths reuse them at different sizes); the old procedural animal art is gone. Co-op: each player is sent only the animals near their view, so big maps stay fast.
 - **Improved:** The Codex is rebuilt as a sidebar reference with icons, searchable cards and filters: Welcome, Powers (by tab and tier), Creeds, Traits, Races, Eras, Governments, World Ages, Biomes and Credits.
 
 ## v0.5.0 — Mountains, new lands and moonlight (2026-11-27)

@@ -5,42 +5,6 @@ import { ICONS, ICON_PALETTE } from './iconmaps.js';
 const cache = new Map();
 const memo = (k, fn) => { let v = cache.get(k); if (!v) { v = fn(); cache.set(k, v); } return v; };
 
-// ---------- animals (side view, 2 walk frames) ----------
-const ANIMAL_LOOK = {
-  deer: { body: [168, 118, 72], belly: [226, 200, 160], w: 14, h: 7, leg: 6, neck: 5, antler: true },
-  boar: { body: [96, 70, 56], belly: [120, 92, 72], w: 13, h: 7, leg: 3, neck: 1, tusk: true },
-  wolf: { body: [130, 130, 136], belly: [196, 196, 200], w: 13, h: 6, leg: 5, neck: 2, tail: true },
-  bear: { body: [100, 68, 46], belly: [120, 86, 60], w: 18, h: 10, leg: 5, neck: 1 },
-  camel: { body: [200, 160, 104], belly: [220, 190, 140], w: 16, h: 7, leg: 9, neck: 7, hump: true },
-  elephant: { body: [140, 140, 150], belly: [160, 160, 170], w: 22, h: 13, leg: 7, neck: 0, trunk: true },
-  mammoth: { body: [120, 80, 56], belly: [140, 96, 66], w: 24, h: 14, leg: 7, neck: 0, trunk: true, fur: true },
-  sheep: { body: [236, 232, 220], belly: [210, 206, 196], w: 12, h: 7, leg: 4, neck: 1, wool: true },
-};
-export function animalSprite(kind, frame, dead = false) {
-  return memo(`a${kind}|${frame}|${dead}`, () => {
-    const L = ANIMAL_LOOK[kind] || ANIMAL_LOOK.deer;
-    const W = 36, H = 32, b = new PixBuf(W, H);
-    const body = C(L.body), belly = C(L.belly), dark = shadeC(body, 0.7);
-    const bx = 18 - L.w / 2, by = H - 2 - L.leg - L.h;
-    for (const [lx, ph] of [[bx + 2, 0], [bx + 4, 1], [bx + L.w - 4, 1], [bx + L.w - 2, 0]]) { const lift = frame === ph ? 1 : 0; b.rect(lx, by + L.h - 1, 2, L.leg + 1 - lift, ph ? dark : body); }
-    b.ellipse(bx + L.w / 2, by + L.h / 2, L.w / 2, L.h / 2, body);
-    b.ellipse(bx + L.w / 2, by + L.h * 0.75, L.w / 2 - 2, L.h / 4, belly);
-    if (L.wool) for (let k = 0; k < 10; k++) b.set(bx + 2 + (k * 5) % (L.w - 2), by + 1 + (k * 3) % (L.h - 2), rgba(250, 248, 240));
-    if (L.fur) for (let x = bx; x < bx + L.w; x += 2) b.vline(x, by + L.h - 2, by + L.h + 2, dark);
-    if (L.hump) b.ellipse(bx + L.w / 2, by, 4, 3, body);
-    const hx = bx + L.w - 1, hy = by - L.neck + 1;
-    if (L.neck) b.rect(hx - 2, hy, 3, L.neck + 2, body);
-    b.ellipse(hx + 2, hy, kind === 'bear' ? 4 : 3, 3, body); b.set(hx + 3, hy - 1, rgba(20, 16, 16));
-    if (L.antler) { const a = rgba(220, 200, 160); b.vline(hx + 1, hy - 7, hy - 3, a); b.set(hx, hy - 6, a); b.set(hx + 2, hy - 7, a); b.set(hx + 3, hy - 5, a); }
-    if (L.tusk) b.set(hx + 5, hy + 2, rgba(250, 250, 240));
-    if (L.trunk) { b.vline(hx + 5, hy, hy + L.h - 2, body); b.set(hx + 6, hy + L.h - 2, body); b.line(hx + 4, hy + 3, hx + 8, hy + 6, rgba(250, 246, 230)); }
-    if (L.tail) b.line(bx, by + 1, bx - 4, by - 1, body);
-    b.rect(hx + 1, hy - 4, 2, 2, body);
-    b.outline(rgba(26, 20, 24), 0.25);
-    if (dead) { const c = makeCanvas(W, H), x = c.getContext('2d'); x.translate(W / 2, H / 2); x.rotate(Math.PI / 2); x.drawImage(b.toCanvas(), -W / 2, -H / 2); return c; }
-    return b.toCanvas();
-  });
-}
 
 // ---------- flags ----------
 export const FLAG_PATTERNS = ['solid', 'bicolorH', 'bicolorV', 'tricolorV', 'tricolorH', 'cross', 'nordic', 'saltire', 'canton', 'chevron', 'diagonal', 'border', 'quartered',

@@ -3,7 +3,7 @@ import { BIOMES, B, F } from '../data/biomes.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { groundTile, mountainSprite, featureSprite, farmTile, roadTile, TS, biomeColor } from './tileart.js';
 import { buildingSprite, scaffold, ROOF_PAD } from './buildart.js';
-import { animalSprite, flagCanvas, iconCanvas } from './miscart.js';
+import { flagCanvas, iconCanvas } from './miscart.js';
 import { pawnSheet, FW, FH } from './pawnart.js';
 import { PACK, packSheet, PW, PH, DIR } from './charpack.js';
 import { Ragdoll } from './ragdoll.js';
@@ -484,15 +484,16 @@ export class Renderer {
         ctx.drawImage(spr, Math.round(sx + T / 2 - 48 * k), Math.round(sy + T - 78 * k), 96 * k, 84 * k);
       } else if (e.k === 1) this.drawBuilding(ctx, e.b, s);
       else if (e.k === 2) {
-        const an = e.a, [sx, sy] = this.worldToScreen(an.x, an.y), sz = s * 1.5 * (ANIMALS[an.kind]?.size > 1.3 ? 1.25 : 1);
-        const ff = an.dead ? null : farmFrame(an.kind, an.id || 0, this.time + (an.id || 0) * 0.37, an.moving);
-        const pf = ff || an.dead ? null : GAN.petFrame(an.kind, this.time + (an.id || 0) * 0.37, an.moving);
+        const an = e.a, [sx, sy] = this.worldToScreen(an.x, an.y), AD = ANIMALS[an.kind] || {}, art = AD.art || an.kind, kid = an.baby ? 0.68 : 1, sz = s * 1.5 * (AD.size > 1.3 ? 1.25 : 1) * kid;
+        const ff = farmFrame(art, an.id || 0, this.time + (an.id || 0) * 0.37, an.moving && !an.dead);
+        const pf = ff ? null : GAN.petFrame(an.kind, this.time + (an.id || 0) * 0.37, an.moving);
         ctx.save(); ctx.translate(Math.round(sx), Math.round(sy));
         if (an.facing < 0) ctx.scale(-1, 1);
-        if (ff) { const K = { cow: 0.62, sheep: 0.85, dog: 0.62, cat: 0.8, horse: 0.62, pig: 0.8, goat: 0.8, chicken: 1.05, rabbit: 0.85, duck: 1.0 }[an.kind] || 0.7, k = s * K * (ANIMALS[an.kind]?.size > 1.3 ? 1.1 : 1) * 1.15;
-          ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(0, -1 * sz, ff.w * k * 0.36, 2.6 * sz, 0, 0, 7); ctx.fill(); ctx.drawImage(ff.im, ff.x, ff.y, ff.w, ff.h, -ff.w * k / 2, -ff.h * k + 2 * k, ff.w * k, ff.h * k); }
-        else if (pf) { ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(0, -1 * sz, 9 * sz, 2.5 * sz, 0, 0, 7); ctx.fill(); ctx.drawImage(pf.im, pf.x, pf.y, 32, 32, -16 * sz * 1.25, -30 * sz * 1.25, 32 * sz * 1.25, 32 * sz * 1.25); }
-        else ctx.drawImage(animalSprite(an.kind, an.moving ? Math.floor(this.time * 6) % 2 : 0, an.dead), -18 * sz, -30 * sz, 36 * sz, 32 * sz);
+        if (ff) { const K = { cow: 0.62, sheep: 0.85, dog: 0.62, cat: 0.8, horse: 0.62, pig: 0.8, goat: 0.8, chicken: 0.85, rabbit: 0.8, duck: 0.85 }[art] || 0.7, k = s * K * (AD.scale || 1) * kid * (AD.size > 1.3 && !AD.scale ? 1.1 : 1) * 1.15;
+          ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(0, -1 * sz, ff.w * k * 0.36, 2.6 * sz, 0, 0, 7); ctx.fill();
+          if (an.dead) { ctx.globalAlpha = 0.75; ctx.translate(0, -ff.h * k * 0.18); ctx.rotate(Math.PI / 2); ctx.translate(ff.h * k * 0.2, ff.w * k * 0.05); }
+          ctx.drawImage(ff.im, ff.x, ff.y, ff.w, ff.h, -ff.w * k / 2, -ff.h * k + 2 * k, ff.w * k, ff.h * k); }
+        else if (pf) { ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(0, -1 * sz, 9 * sz, 2.5 * sz, 0, 0, 7); ctx.fill(); if (an.dead) ctx.globalAlpha = 0.5; ctx.drawImage(pf.im, pf.x, pf.y, 32, 32, -16 * sz * 1.25, -30 * sz * 1.25, 32 * sz * 1.25, 32 * sz * 1.25); }
         ctx.restore();
       }
       else if (e.k === 3) this.drawPawn(ctx, e.p, s, dt);
