@@ -8,7 +8,9 @@ export const CHANGELOG = [
       ['new', 'Flag designer: 32 patterns (up from 13) and about 60 emblems (up from 13), plus emblem position (centre, hoist, canton, fly), three sizes, emblem outline, mirrored patterns and a "Surprise me" button.'],
       ['new', 'Ducks join the creatures: a new power, plus ducklings, with new Modern Farm art.'],
       ['new', 'More Modern Farm art in play: calves, lambs, piglets, kids, bunnies, chicks, foals and ducklings now appear in herds; roosters and many more coat colours for every animal; 18 crop types (corn, tomatoes, grapes, pineapples, pumpkins and more) with tall plants grow on farms.'],
-      ['improved', 'Every sidebar, dock, overlay and HUD icon was redrawn with the newer Raven fantasy-icon art. The toolbar is slightly wider so labels fit.'],
+      ['new', 'Animated main-menu quote under the title: "When everything is wrong, being hopeful is a rebellion." — the words rise out of a blur one by one, the last ones glow gold and a light sweep loops across it.'],
+      ['improved', 'The main menu is centred over the globe and laid out in tiers: Continue/Singleplayer on top, then Multiplayer, Load and Cloud Saves, then Codex, Settings and What\'s New.'],
+      ['improved', 'Every sidebar, dock, overlay, menu and HUD icon now uses crisp outlined icons from Pixel Atlas (CC0): globe, cloud, gear, floppy disk, magnifier, flags, resources and more. The toolbar is slightly wider so labels fit.'],
     ],
   },
   {

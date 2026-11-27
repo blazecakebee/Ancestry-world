@@ -21,7 +21,6 @@ import { CHANGELOG, CURRENT_VERSION } from '../data/changelog.js';
 
 export function showMainMenu(app) {
   const root = document.getElementById('menu');
-  const q = LORE.quotes[Math.floor(Math.random() * LORE.quotes.length)];
   const item = (icon, label, sub, fn, primary) => h('button', { class: `btn ${primary ? 'primary' : ''}`, onclick: fn }, iconImg(icon), label, h('span', { class: 'sub' }, sub));
   // Continue: most recent save (autosave or manual); hidden when there are none.
   const cont = h('button', { class: 'btn primary continue hidden' });
@@ -34,18 +33,24 @@ export function showMainMenu(app) {
   }).catch(() => {});
   root.replaceChildren(h('div', { class: 'brand' },
     h('div', { class: 'logo' }, 'Ancestry', h('br'), 'World'),
-    h('div', { class: 'tagline' }, 'Guide a people from the first campfire to the stars. Watch every citizen live, love and dream — together with your friends.'),
+    (() => { const words = 'When everything is wrong, being hopeful is a rebellion.'.split(' ');
+      return h('div', { class: 'hero-quote', 'aria-label': 'When everything is wrong, being hopeful is a rebellion.' },
+        h('span', { class: 'q-mark', 'aria-hidden': 'true' }, '“'),
+        h('span', { class: 'q-text', 'aria-hidden': 'true' }, words.map((w, i) => h('span', { class: `q-w ${i >= words.length - 3 ? 'hot' : ''}`, style: { animationDelay: `${0.45 + i * 0.17}s` } }, w + (i < words.length - 1 ? '\u00a0' : '')))),
+        h('span', { class: 'q-mark close', 'aria-hidden': 'true' }, '”'),
+        h('span', { class: 'q-rule', 'aria-hidden': 'true' }),
+        h('span', { class: 'q-by' }, '— Control, “I’m Not Coming Back”')); })(),
     h('div', { class: 'menu-buttons' },
-      cont,
-      item('globe', 'Singleplayer', 'New Globe', () => showNewGlobe(app, false), true),
-      item('users', 'Multiplayer', 'Host or join', () => showMultiplayer(app)),
+      h('div', { class: 'mgroup g1' }, cont, item('globe', 'Singleplayer', 'New Globe', () => showNewGlobe(app, false), true)),
+      h('div', { class: 'mgroup g2' },
+      item('multiplayer', 'Multiplayer', 'Host or join', () => showMultiplayer(app)),
       item('load', 'Load World', 'Your saves', () => showLoad(app)),
-      (() => { const b = item('cloud', 'Cloud Saves', cloud.user ? cloud.user.name : 'Sign in with Google', () => showCloud(app)); cloud.onChange(() => { if (b.isConnected) b.querySelector('.sub').textContent = cloud.user ? cloud.user.name : 'Sign in with Google'; }); return b; })(),
-      item('book', 'Lore & Trait Codex', 'Learn the world', () => showCodex()),
+      (() => { const b = item('cloud', 'Cloud Saves', cloud.user ? cloud.user.name : 'Sign in with Google', () => showCloud(app)); cloud.onChange(() => { if (b.isConnected) b.querySelector('.sub').textContent = cloud.user ? cloud.user.name : 'Sign in with Google'; }); return b; })()),
+      h('div', { class: 'mgroup g3' },
+      item('book', 'Codex', 'Lore & traits', () => showCodex()),
       item('settings', 'Settings', '20+ options', () => showSettings(app)),
-      (() => { const unseen = app.settings.lastSeenVersion !== CURRENT_VERSION; const b = item('scroll', "What's New", unseen ? `v${CURRENT_VERSION} · new!` : `v${CURRENT_VERSION}`, () => { showChangelog(app); b.querySelector('.sub').textContent = `v${CURRENT_VERSION}`; b.classList.remove('has-new'); }); if (unseen) b.classList.add('has-new'); return b; })(),
+      (() => { const unseen = app.settings.lastSeenVersion !== CURRENT_VERSION; const b = item('scroll', "What's New", unseen ? `v${CURRENT_VERSION} · new!` : `v${CURRENT_VERSION}`, () => { showChangelog(app); b.querySelector('.sub').textContent = `v${CURRENT_VERSION}`; b.classList.remove('has-new'); }); if (unseen) b.classList.add('has-new'); return b; })()),
     ),
-    h('div', { class: 'quote' }, `“${q.text}” — ${q.by}`),
     h('div', { class: 'foot' }, `v${CURRENT_VERSION} · Made with love for co-op god games. Press `, h('span', { class: 'kbd' }, 'F11'), ' for fullscreen.'),
   ));
   root.classList.remove('hidden');
@@ -101,10 +106,10 @@ export function showMultiplayer(app) {
       h('div', { class: 'card col' }, h('h3', {}, 'Join a friend'),
         h('label', { class: 'field' }, 'Your name', h('input', { type: 'text', value: name, maxlength: 24, oninput: (e) => (name = e.target.value) })),
         h('label', { class: 'field' }, 'Invite code', h('input', { type: 'text', placeholder: 'ABC123', maxlength: 6, class: 'secret', style: { textTransform: 'uppercase', letterSpacing: '.2em', fontWeight: 800 }, oninput: (e) => (code = e.target.value.toUpperCase()) })),
-        h('button', { class: 'btn primary', onclick: async () => { if (code.length < 6) return toast('Enter the 6-character invite code', { sound: 'error' }); s.playerName = name; saveSettings(s); m.close(); app.joinWorld(code, name); } }, iconImg('users'), 'Join world'))),
+        h('button', { class: 'btn primary', onclick: async () => { if (code.length < 6) return toast('Enter the 6-character invite code', { sound: 'error' }); s.playerName = name; saveSettings(s); m.close(); app.joinWorld(code, name); } }, iconImg('multiplayer'), 'Join world'))),
     h('p', { class: 'tiny muted' }, 'Co-op is peer-to-peer: share the code and friends anywhere can join — even from the GitHub Pages link. Keep the host\'s tab open. Turn on Stream-Safe mode in Settings to hide codes on screen.'),
   );
-  const m = modal('Multiplayer', body, { icon: iconImg('users') });
+  const m = modal('Multiplayer', body, { icon: iconImg('multiplayer') });
 }
 
 // ---------- Load ----------

@@ -825,7 +825,7 @@ export class Renderer {
     if (!overlay) ctx.drawImage(this.globe.starfield(this.W, this.H), 0, 0);
     let R = this.globeRadius();
     if (c.zoom > ZOOM.GLOBE && !this.menuMode) { const Rm = c.zoom * w.W / (2 * Math.PI), u = Math.min(1, (c.zoom - ZOOM.GLOBE) / (ZOOM.GLOBE * 2.4)), e = u * u * (3 - 2 * u); R = R + (Rm - R) * e; }
-    const CX = this.W / 2 + (this.menuMode ? this.W * 0.17 : 0);
+    const CX = this.W / 2;
     const pxScale = Math.max(1, Math.round(R / 160));
     const D = clamp(Math.round((R * 2) / pxScale), 48, 420);
     const lon0 = ((c.x + 0.5) / w.W) * 2 * Math.PI - Math.PI;

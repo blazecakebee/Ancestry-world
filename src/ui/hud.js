@@ -112,7 +112,7 @@ export class HUD {
         tool('inspect', 'inspect', 'Inspect', 'Q', 'Inspect <span class="kbd">Q</span><br>Click citizens, buildings & settlements', () => app.setTool('inspect')),
         tool('build', 'plan', 'Plan', 'B', 'Plan a building <span class="kbd">B</span><br>Your people will build it', () => this.openBuildMenu()),
         tool('possess', 'possess', 'Possess', 'F', 'Possess a citizen<br>Select one of your people, then take control (WASD to move, F to act, R to release)', () => app.possessSelected()),
-        tool('overlay', 'map', 'Overlays', 'F1', 'Map overlays <span class="kbd">F1–F10</span>', () => this.toggleOverlayMenu()),
+        tool('overlay', 'map', 'Layers', 'F1', 'Map overlays <span class="kbd">F1–F10</span>', () => this.toggleOverlayMenu()),
         h('div', { class: 'sep' }),
         tool('nation', 'flag', 'Nation', 'N', 'Nation <span class="kbd">N</span>', () => this.me && this.openNation(this.me.id)),
         tool('space', 'rocket', 'Space', '', 'Offworld & space', () => this.openSpace()),
@@ -225,7 +225,7 @@ export class HUD {
     const key = JSON.stringify(ps.map((p) => [p.id, p.online, p.nationId, w.nations[p.nationId]?.name])) + app.settings.streamerMode;
     if (key === this._plKey) return; this._plKey = key;
     this.playersEl.replaceChildren(
-      h('div', { class: 'row' }, iconImg('users', 2, 'px-icon sm'), h('b', {}, 'Co-op world'), h('div', { class: 'grow' }), app.session.code ? h('span', { class: 'invite', tip: 'Invite code — share it with friends', onclick: () => { navigator.clipboard?.writeText(app.session.code); toast('Invite code copied'); } }, app.session.code) : null),
+      h('div', { class: 'row' }, iconImg('multiplayer', 2, 'px-icon sm'), h('b', {}, 'Co-op world'), h('div', { class: 'grow' }), app.session.code ? h('span', { class: 'invite', tip: 'Invite code — share it with friends', onclick: () => { navigator.clipboard?.writeText(app.session.code); toast('Invite code copied'); } }, app.session.code) : null),
       ...ps.map((p) => { const n = w.nations[p.nationId]; return h('div', { class: 'p' }, h('span', { class: 'dot', style: { background: p.online ? 'var(--good)' : 'var(--muted)' } }), h('b', {}, p.name), p.id === w.hostId ? h('span', { class: 'chip' }, 'host') : null, h('span', { class: 'muted small grow', style: { textAlign: 'right' } }, n ? n.name : 'choosing…')); }));
   }
 

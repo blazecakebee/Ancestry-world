@@ -164,6 +164,7 @@ caravans between nations, more animal species and taming, deeper religion/cultur
 - Skill and buff icons: VerArc Stash "Basic Skills and Buffs".
 - Effects: Super Pixel Effects Gigapack (free version) — see `assets/packs/fx/license.txt` (attribution required).
 - Moon and planet lighting: Deep-Fold PixelPlanets (MIT) — `assets/packs/pixelplanets/LICENSE-PixelPlanets-MIT.txt`.
+- UI icons: Pixel Atlas (pixelatlas.org) — CC0 16×16 sprites, generated with Krea 2 (see `assets/packs/atlas/README.txt`); rebuild with `tools/build_atlas.py`.
 - Cloud saves use Google Identity Services and the Drive API (appDataFolder scope); the OAuth client id in `src/ui/cloud.js` is public by design.
 - Animals, crops and solar-system planet icons: LimeZu "Modern Farm" (limezu.itch.io) — see `assets/packs/farm/LICENSE-ModernFarm.txt` (credit requested; not redistributable as a standalone asset pack).
 - Some power icons: "Free - Raven Fantasy Icons" (Raven Fantasy); skill/buff icons: VerArc Stash.

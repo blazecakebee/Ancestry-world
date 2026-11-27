@@ -155,30 +155,27 @@ const urlCache = new Map();
 const VA_BASE = typeof document !== 'undefined' ? new URL('../../assets/packs/verarc/', import.meta.url).href : '';
 const RV_BASE = typeof document !== 'undefined' ? new URL('../../assets/packs/raven/', import.meta.url).href : '';
 // Every interface icon name maps onto the newer Raven (rv:) art; unmapped names (pause/play/close/arrows…) stay as crisp hand-made glyphs.
-export const UI_REMAP = {
-  glitter: 'rv:173', star: 'rv:670', bulb: 'rv:296', rain: 'rv:653', heart: 'rv:659', dove: 'rv:233', wind: 'rv:654', eye: 'rv:335', wheat: 'rv:460', scroll: 'rv:8',
-  gem: 'rv:161', flask: 'rv:123', sword: 'rv:155', cradle: 'rv:668', mountain: 'rv:17', crown: 'rv:23', shield: 'rv:598',
-  food: 'rv:441', meals: 'rv:527', rations: 'rv:513', wood: 'rv:109', stone: 'rv:316', metal: 'rv:221', cloth: 'rv:204', medicine: 'rv:271',
-  pop: 'rv:652', research: 'rv:292', gear: 'rv:2', map: 'rv:305', book: 'rv:101', flag: 'rv:41', chat: 'rv:7', users: 'rv:636', pin: 'rv:394', skull: 'rv:673',
-  baby: 'rv:522', fire: 'rv:81', storm: 'rv:669', angry: 'rv:640', love: 'rv:661', ring: 'rv:116', shirt: 'rv:203', hammer: 'rv:126', hand: 'rv:663', house: 'rv:16',
-  temple: 'rv:36', sun: 'rv:386', moon: 'rv:384', tree: 'rv:32', wave: 'rv:356', sickle: 'rv:337', trophy: 'rv:15', globe: 'rv:216', rocket: 'rv:12', satellite: 'rv:210',
-  lock: 'rv:178', unlock: 'rv:179', warning: 'rv:631', info: 'rv:13', save: 'rv:10', load: 'rv:11', settings: 'rv:2', possess: 'rv:5', plan: 'rv:125', inspect: 'rv:662',
-};
-const isVA = (n) => typeof n === 'string' && (n.startsWith('va:') || n.startsWith('rv:'));
-const vaURL = (n) => (n.startsWith('rv:') ? RV_BASE + n.slice(3) : VA_BASE + n.slice(3).replace(/[()]/g, '')) + '.png';
+export const UI_REMAP = { gem: 'rv:161' };
+// Pixel Atlas (CC0) 16x16 outlined icons, preferred for every UI name it covers.
+const ATLAS = new Set('multiplayer angry baby book bulb chat cloth cloud cradle crown dove eye fire flag flask food gear glitter globe hammer hand heart house info inspect load lock love map meals medicine metal moon mountain pin plan pop possess rain rations research ring rocket satellite save scroll settings shield shirt sickle skull star stone storm sun sword temple tree trophy unlock users volume warning wave wheat wind wood'.split(' '));
+const AT_BASE = typeof document !== 'undefined' ? new URL('../../assets/packs/atlas/', import.meta.url).href : '';
+const isVA = (n) => typeof n === 'string' && (n.startsWith('va:') || n.startsWith('rv:') || n.startsWith('at:'));
+const vaURL = (n) => n.startsWith('at:') ? AT_BASE + n.slice(3) + '.png' : (n.startsWith('rv:') ? RV_BASE + n.slice(3) : VA_BASE + n.slice(3).replace(/[()]/g, '')) + '.png';
+const resolve = (name) => (ATLAS.has(name) ? 'at:' + name : UI_REMAP[name] || name);
 export function iconURL(name, scale = 2) {
-  if (UI_REMAP[name]) name = UI_REMAP[name];
+  name = resolve(name);
   if (isVA(name)) return vaURL(name);
   const k = name + scale; if (urlCache.has(k)) return urlCache.get(k);
   const u = iconCanvas(name, scale).toDataURL(); urlCache.set(k, u); return u;
 }
-// remapped UI icons are 32px art shown in the same footprint the old 12px glyphs used (sm = 18px, normal = 24px, big scales grow)
-const remapPx = (scale, cls) => (/\bsm\b/.test(cls) ? 18 : 12 * scale);
-const vaStyle = (name, scale, cls) => (UI_REMAP[name] ? `width:${remapPx(scale, cls)}px;height:${remapPx(scale, cls)}px;image-rendering:auto` : `width:${16 * scale}px;height:${16 * scale}px;image-rendering:pixelated`);
-export const iconHTML = (name, scale = 2, cls = 'px-icon') => `<img class="${cls}" src="${iconURL(name, scale)}" alt="" draggable="false"${isVA(UI_REMAP[name] || name) ? ` style="${vaStyle(name, scale, cls)}"` : ''}>`;
+// remapped UI icons are 32px art shown in the same footprint the old 12px glyphs used (sm = 16px, normal = 32px; atlas icons are 16px art so they stay on whole pixels)
+const remapPx = (scale, cls) => (/\bsm\b/.test(cls) ? 16 : 16 * Math.max(1, Math.round(scale)));
+const vaStyle = (name, scale, cls) => (resolve(name) !== name && resolve(name).startsWith('at:') ? `width:${remapPx(scale, cls)}px;height:${remapPx(scale, cls)}px;image-rendering:pixelated` : UI_REMAP[name] ? `width:${remapPx(scale, cls)}px;height:${remapPx(scale, cls)}px;image-rendering:auto` : `width:${16 * scale}px;height:${16 * scale}px;image-rendering:pixelated`);
+export const iconHTML = (name, scale = 2, cls = 'px-icon') => `<img class="${cls}" src="${iconURL(name, scale)}" alt="" draggable="false"${isVA(resolve(name)) ? ` style="${vaStyle(name, scale, cls)}"` : ''}>`;
 export function iconImg(name, scale = 2, cls = 'px-icon') {
   const i = document.createElement('img'); i.className = cls; i.src = iconURL(name, scale);
-  if (isVA(UI_REMAP[name] || name)) { const px = UI_REMAP[name] ? remapPx(scale, cls) : 16 * scale; i.style.width = i.style.height = px + 'px'; i.style.imageRendering = UI_REMAP[name] ? 'auto' : 'pixelated'; }
+  const rn = resolve(name), at = rn.startsWith('at:');
+  if (isVA(rn)) { const px = at || UI_REMAP[name] ? remapPx(scale, cls) : 16 * scale; i.style.width = i.style.height = px + 'px'; i.style.imageRendering = !at && UI_REMAP[name] ? 'auto' : 'pixelated'; }
   i.alt = ''; i.draggable = false; return i;
 }
 
