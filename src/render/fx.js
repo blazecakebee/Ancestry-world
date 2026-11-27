@@ -44,6 +44,7 @@ export class FX {
         break;
       }
       case 'era': this.texts.push({ text: e.label || 'A new era dawns', age: 0, life: 4, nationId: e.nationId, big: true }); break;
+      case 'order': this.rings.push({ x: e.x, y: e.y, r: 1.6, age: 0, life: 0.9, col: e.kind === 'fight' || e.kind === 'destroy' ? '#ff5a5a' : e.kind === 'hunt' ? '#ffb347' : '#8fe39a' }); break;
       case 'founded': case 'conquest': this.rings.push({ x: e.x, y: e.y, r: 8, age: 0, life: 2, col: e.type === 'conquest' ? '#ff5a5a' : '#ffd34d' }); break;
       case 'launch': this.burst(e.x, e.y - 2, 50, { col: ['#ffffff', '#ffb347', '#ff6a1a'], speed: 1.5, up: 12, grav: 2, life: 2.2, size: 2, kind: 'puff' }); break;
       case 'aurora': this.texts.push({ aurora: true, age: 0, life: 6 }); break;

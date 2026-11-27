@@ -118,7 +118,7 @@ function stepSquad(world, sq, dt, rng) {
   }
   const defenders = (tgt._pawns || []).filter((p) => !p.dead && !p.downed && p.age >= 16 && (p.role === 'soldier' || p.traits.includes('bloodthirsty') || p.possessedBy));
   for (const p of fit) {
-    if (p.possessedBy) continue;
+    if (p.possessedBy || p.heldBy) continue;
     p.state = 'walk';
     const w = eraOf(p.gearEra).weapon, reach = w.ranged ? w.range * 0.8 : 1.2;
     const foes = pawnsNear(world, p.x, p.y, 10).filter((q) => !q.dead && !q.downed && q.nationId === sq.targetNation);

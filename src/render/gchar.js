@@ -1,11 +1,14 @@
 // Layered pixel characters from the GandalfHardcore character pack. Layers are pre-packed into compact 8x4 sheets of
-// 64x56 cells by tools/build_assets.py:  row0 idle(5)  row1 walk(8)  row2 attack(6)  row3 col0 = lying down.
+// 64x56 cells (10 x 7) by tools/build_assets.py:  0 idle(5)  1 walk(8)  2 run(8)  3 jump(4)  4 flail(4)  5 attack(6)  6 death(10, last = lying).
 // Races are kept: humans use the 5 skin tones, elves get elven ears on a light skin, orcs use the orc skin set.
 // The art is a single side view (facing right): the renderer mirrors it for left/up movement.
 const BASE = new URL('../../assets/packs/gchar/', import.meta.url);
 export const GCH = { ready: false, man: null };
 export const GW = 64, GH = 56, GFOOT = 55, GTOP = 8;       // cell size, y of the feet, y of the top of the head
-export const GROW = { idle: 0, walk: 1, attack: 2, down: 3 }, GFRAMES = { idle: 5, walk: 8, attack: 6 };
+export const GROW = { idle: 0, walk: 1, run: 2, jump: 3, flail: 4, attack: 5, death: 6 }, GFRAMES = { idle: 5, walk: 8, run: 8, jump: 4, flail: 4, attack: 6, death: 10 };
+export const GCOLS = 10, GROWS = 7;
+/** Body bands of a standing frame, for ragdolls (head top incl. hats, neck, hips, feet, centre x). */
+export const GBAND = { top: 3, headEnd: 23, hipY: 40, bottom: 55, cx: 32 };
 const imgs = new Map();
 function img(path) {
   let e = imgs.get(path);
@@ -77,12 +80,12 @@ export function gRecipe(p, era, role, nationColor) {
   return L;
 }
 
-/** Composite sheet (512x224 canvas) or null while layer images are still loading. */
+/** Composite sheet (640x392 canvas) or null while layer images are still loading. */
 export function gcharSheet(p, era, role, nationColor) {
   if (!GCH.ready) return null;
   const layers = gRecipe(p, era, role, nationColor).map(img);
   if (layers.some((e) => !e.ok && !e.failed)) return null;
-  const c = document.createElement('canvas'); c.width = GW * 8; c.height = GH * 4;
+  const c = document.createElement('canvas'); c.width = GW * GCOLS; c.height = GH * GROWS;
   const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
   for (const e of layers) if (e.ok) x.drawImage(e.im, 0, 0);
   return c;

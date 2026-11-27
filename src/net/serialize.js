@@ -62,13 +62,13 @@ export function deserializeWorld(s) {
 }
 
 // ---------------- network snapshots ----------------
-const STATE_CODE = { idle: 0, walk: 1, work: 2, fight: 3, sleep: 4, eat: 5, downed: 6, dead: 7, break: 8 };
+const STATE_CODE = { idle: 0, walk: 1, work: 2, fight: 3, sleep: 4, eat: 5, downed: 6, dead: 7, break: 8, held: 9, flee: 10 };
 const STATE_NAME = Object.fromEntries(Object.entries(STATE_CODE).map(([k, v]) => [v, k]));
 export const CARD_KEYS = ['id', 'name', 'family', 'sex', 'race', 'age', 'look', 'nationId', 'settlementId', 'role', 'gearEra', 'traits', 'mood', 'possessedBy', 'parents', 'children', 'spouse', 'lover', 'lifespan', 'deathCause', 'dressed', 'work'];
 
 export function pawnCard(p) { const c = {}; for (const k of CARD_KEYS) c[k] = p[k]; c.fx = p.fx; return c; }
 export function pawnFast(p) {
-  const flags = (p.downed ? 1 : 0) | (p.dead ? 2 : 0) | (p.attackAnim > 0 ? 4 : 0) | (p.brk ? 8 : 0) | (p.possessedBy ? 16 : 0) | (p.facing < 0 ? 32 : 0);
+  const flags = (p.downed ? 1 : 0) | (p.dead ? 2 : 0) | (p.attackAnim > 0 ? 4 : 0) | (p.brk ? 8 : 0) | (p.possessedBy ? 16 : 0) | (p.facing < 0 ? 32 : 0) | (p.heldBy ? 64 : 0);
   return [p.id, Math.round(p.x * 100), Math.round(p.y * 100), STATE_CODE[p.state] ?? 0, flags, Math.round(p.hp), Math.round(p.mood), p.carry?.item || 0, p.work || 0];
 }
 export function pawnDetail(p) { return strip({ ...p, path: null }); }
@@ -95,7 +95,7 @@ export function applyFast(world, arr) {
     seen.add(r[0]);
     p.x = r[1] / 100; p.y = r[2] / 100; p.state = STATE_NAME[r[3]] || 'idle';
     p.carry = r[7] ? { item: r[7] } : null; if (r[8]) p.work = r[8];
-    p.downed = !!(r[4] & 1); p.dead = !!(r[4] & 2); p.attackAnim = r[4] & 4 ? 1 : 0; p.brk = r[4] & 8 ? (p.brk || { type: 'sadWander' }) : null; p.facing = r[4] & 32 ? -1 : 1;
+    p.downed = !!(r[4] & 1); p.dead = !!(r[4] & 2); p.attackAnim = r[4] & 4 ? 1 : 0; p.brk = r[4] & 8 ? (p.brk || { type: 'sadWander' }) : null; p.facing = r[4] & 32 ? -1 : 1; p.heldBy = r[4] & 64 ? (p.heldBy || 1) : null;
     p.hp = r[5]; p.mood = r[6];
   }
   return seen;

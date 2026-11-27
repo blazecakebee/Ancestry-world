@@ -1,6 +1,7 @@
 // Every player action is a command. Singleplayer and multiplayer use the same path:
 // the host validates each command against ownership and granted permissions, then applies it.
 // This is what guarantees nobody can interfere with a friend's nation without their consent.
+import { giveOrder } from './orders.js';
 import { addItem } from './items.js';
 import { DAY_LEN } from '../core/time.js';
 import { canBuildType, techCommand } from './tech.js';
@@ -95,6 +96,7 @@ export function applyCommand(world, pid, cmd, rng) {
       else return fail();
       return ok();
     }
+    case 'order': { if (!me) return fail('You have no people.'); const r = giveOrder(world, me, cmd); return r.err ? fail(r.err) : ok(r.msg); }
     case 'creed': return creedCommand(world, me, cmd, rng);
     case 'tech': { if (!me) return fail('You have no people.'); const e = techCommand(world, me, cmd); return e ? fail(e) : ok(); }
     case 'flag': {
@@ -164,6 +166,33 @@ export function applyCommand(world, pid, cmd, rng) {
       if (p.possessedBy && p.possessedBy !== pid) return fail('Someone else is controlling them.');
       for (const q of Object.values(world.pawns)) if (q.possessedBy === pid) { q.possessedBy = null; q.ctrl = null; }
       p.possessedBy = pid; p.ctrl = {}; p.job = null; p.path = null; p.brk = null;
+      return ok();
+    }
+    case 'grab': { // pick a person up with the divine hand
+      const p = world.pawns[cmd.pid]; if (!p || p.dead) return fail();
+      const n = world.nations[p.nationId];
+      if (n && n.ownerId && !allowed(world, pid, p.nationId, 'control')) return fail('You can only pick up your own people (or a friend\'s, with permission).');
+      if (p.heldBy && p.heldBy !== pid) return fail('Someone else is holding them.');
+      for (const q of Object.values(world.pawns)) if (q.heldBy === pid) q.heldBy = null;
+      p.heldBy = pid; p.job = null; p.path = null; p.state = 'held';
+      return ok();
+    }
+    case 'grabMove': {
+      const p = Object.values(world.pawns).find((q) => q.heldBy === pid); if (!p) return fail();
+      const x = +cmd.x, y = +cmd.y; if (!Number.isFinite(x) || !Number.isFinite(y)) return fail();
+      p.x = ((x % world.W) + world.W) % world.W; p.y = clamp(y, 1, world.H - 2); p.rx = p.x; p.ry = p.y;
+      return ok();
+    }
+    case 'drop': {
+      const p = Object.values(world.pawns).find((q) => q.heldBy === pid); if (!p) return fail();
+      p.heldBy = null; p.state = 'idle';
+      const vx = clamp(+cmd.vx || 0, -60, 60), vy = clamp(+cmd.vy || 0, -60, 60), sp = Math.hypot(vx, vy);
+      if (sp > 6) { // thrown!
+        p.x = ((p.x + vx * 0.12) % world.W + world.W) % world.W; p.y = clamp(p.y + vy * 0.12, 1, world.H - 2);
+        if (sp > 14) injure(p, rng, Math.min(40, (sp - 14) * 1.6), 'blunt');
+        addThought(p, 'thrown', world.time, 1);
+        emitFx(world, { type: 'knock', pid: p.id, ix: vx * 0.35, iy: -3 - sp * 0.12 });
+      } else emitFx(world, { type: 'knock', pid: p.id, ix: vx * 0.2, iy: -1.2 });
       return ok();
     }
     case 'release': { for (const q of Object.values(world.pawns)) if (q.possessedBy === pid) { q.possessedBy = null; q.ctrl = null; } return ok(); }

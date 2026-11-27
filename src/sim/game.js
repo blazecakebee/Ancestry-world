@@ -79,6 +79,7 @@ export class Game {
         import_updateMood(p, w.time, dt * 3, nm);
       }
       if (tick % 30 === 0 && p.buff.fxOn) refreshBuffs(w, p); // expire/re-apply divine buffs (haste, ward, fervor...)
+      if (p.heldBy) { if (p.dead || !w.players?.[p.heldBy]) p.heldBy = null; else { p.state = 'held'; p.moving = false; continue; } } // lifted by a deity's hand
       if (p.raider) { this.stepRaider(p, dt); continue; }
       if (!s && !p.possessedBy && !p.squad) { // homeless wanderer: rejoin nearest settlement of own nation
         const home = Object.values(w.settlements).find((x) => x.nationId === p.nationId);

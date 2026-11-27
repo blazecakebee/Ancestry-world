@@ -141,19 +141,18 @@ def main():
 main()
 
 # ---------------------------------------------------------------------------------------------------------------
-# Gandalf layered characters -> compact sheets. Source frames are 80x64 in an 800x448 sheet; we keep rows
-# idle(0, 5 frames) walk(1, 8) attack(5, 6) and the lying frame (row 6 col 9) and crop each to a 64x56 cell.
+# Gandalf layered characters -> compact sheets. Source frames are 80x64 in an 800x448 sheet (10 x 7). We keep every
+# animation row and crop each frame to a 64x56 cell:  0 idle(5)  1 walk(8)  2 run(8)  3 jump(4)  4 flail(4)
+# 5 attack(6)  6 death(10, last = lying).
 CELL_W, CELL_H, CROP_X, CROP_Y = 64, 56, 8, 8
-LAYOUT = [(0, 5), (1, 8), (5, 6)]  # (source row, frames) -> compact rows 0,1,2 ; compact row 3 col 0 = lying frame
 
 def compact(path):
     im = Image.open(path).convert('RGBA')
     big = Image.new('RGBA', (800, 448), (0, 0, 0, 0)); big.paste(im, (0, 0))
-    out = Image.new('RGBA', (CELL_W * 8, CELL_H * 4), (0, 0, 0, 0))
-    for r, (row, n) in enumerate(LAYOUT):
-        for c in range(n):
-            out.paste(big.crop((c * 80 + CROP_X, row * 64 + CROP_Y, c * 80 + CROP_X + CELL_W, row * 64 + CROP_Y + CELL_H)), (c * CELL_W, r * CELL_H))
-    out.paste(big.crop((9 * 80 + CROP_X, 6 * 64 + CROP_Y, 9 * 80 + CROP_X + CELL_W, 6 * 64 + CROP_Y + CELL_H)), (0, 3 * CELL_H))
+    out = Image.new('RGBA', (CELL_W * 10, CELL_H * 7), (0, 0, 0, 0))
+    for row in range(7):
+        for c in range(10):
+            out.paste(big.crop((c * 80 + CROP_X, row * 64 + CROP_Y, c * 80 + CROP_X + CELL_W, row * 64 + CROP_Y + CELL_H)), (c * CELL_W, row * CELL_H))
     return out
 
 def build_gchar():

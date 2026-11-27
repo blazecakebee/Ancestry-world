@@ -24,6 +24,7 @@ import { NATION_COLORS } from './data/names.js';
 import { cellAt } from './world/atmosphere.js';
 import { BIOMES } from './data/biomes.js';
 import { wrap, clamp, dist } from './core/util.js';
+const wdx = (a, b, W) => { let d = b - a; if (d > W / 2) d -= W; if (d < -W / 2) d += W; return d; };
 import { dateString } from './sim/world.js';
 import { CURRENT_VERSION } from './data/changelog.js';
 
@@ -256,6 +257,14 @@ class App {
     r.ok ? audio.play('power', { power: P.id }) : toast(r.msg, { sound: 'error' });
   }
   startPlacing(type) { this.tool = 'build'; this.buildType = type; setCursor('build'); this.updateModeChip(); }
+  /** Move the person held by the divine hand so they dangle under the cursor (host applies; throttled for co-op). */
+  grabTo(d, sx, sy) {
+    const r = this.renderer, s = r.cam.zoom / 32, pos = r.screenToWorld(sx, sy + 40 * s * 1.2); if (!pos) return;
+    const now = performance.now(), g = d.grab;
+    g.hist.push({ t: now, x: pos[0], y: pos[1] }); if (g.hist.length > 8) g.hist.shift();
+    const p = this.session.world.pawns[g.pid]; if (p) { p.x = p.rx = pos[0]; p.y = p.ry = pos[1]; }
+    if (now - g.last > 45) { g.last = now; this.session.command({ type: 'grabMove', x: pos[0], y: pos[1] }); }
+  }
   possessSelected() { if (this.selection?.type === 'pawn') this.possess(this.selection.id); else toast('Select one of your citizens first (Inspect tool), then Possess.'); }
   setPossessMode(m) { this.possessMode = m; this.updateModeChip(); this._ctrlKey = null; audio.play('toggle'); }
   async possess(pid) { const r = await this.session.command({ type: 'possess', pid }); if (!r.ok) return toast(r.msg, { sound: 'error' }); this.possessed = pid; this.possessMode = this.possessMode || 'auto'; setCursor('possess'); this.renderer.cam.tz = Math.max(this.renderer.cam.tz, 56); audio.play('power', { power: 'calm' }); this.updateModeChip(); }
@@ -268,9 +277,11 @@ class App {
     const w = this.session.world;
     if (this.possessed && w.pawns[this.possessed]) text = `Possessing ${w.pawns[this.possessed].name} — WASD move · 1-6 pick an action · F / click to use it · R release`;
     else if (this.tool === 'power' && this.armed) { const P = powerById[this.armed]; text = `${P.name}: click ${P.target === 'pawn' ? 'a citizen' : P.target === 'settlement' ? 'a settlement' : 'the land'}${P.id === 'tectonic' ? ' (Shift = lower)' : ''} · right-click to cancel`; }
+    else if (this.tool === 'order') text = `Order: ${this.orderKind || 'chop'} — click the target · 1-6 change order · Esc to stop`;
     else if (this.tool === 'build') text = `Planning ${BUILDINGS[this.buildType] ? this.buildType : ''}: click inside your territory · right-click to cancel`;
     chip.classList.toggle('hidden', !text); if (text) chip.textContent = text;
     this.hud.setPossessBar?.(!!(this.possessed && w.pawns[this.possessed]), this.possessMode || 'auto', (m) => this.setPossessMode(m));
+    this.hud.setOrderBar?.(this.tool === 'order' && !this.possessed, this.orderKind || 'chop', (k) => { this.orderKind = k; this.updateModeChip(); audio.play('toggle'); });
   }
 
   // ---------- events → sound, toasts, auto-pause ----------
@@ -326,9 +337,26 @@ class App {
       audio.init();
       drag = { x: e.clientX, y: e.clientY, moved: 0, button: e.button };
       cv.setPointerCapture(e.pointerId);
+      // press and hold on a person to pick them up with the divine hand
+      if (e.button === 0 && (this.tool === 'inspect' || this.tool === 'order') && r.mode === 'surface' && !this.possessed) {
+        const hit = r.pick(e.clientX * dpr(), e.clientY * dpr());
+        if (hit?.type === 'pawn') {
+          const d0 = drag;
+          clearTimeout(this._grabT);
+          this._grabT = setTimeout(async () => {
+            if (drag !== d0 || d0.moved > 6) return;
+            const res = await this.session.command({ type: 'grab', pid: hit.id });
+            if (!res.ok) { if (res.msg) toast(res.msg, { sound: 'error' }); return; }
+            if (drag !== d0) { this.session.command({ type: 'drop', vx: 0, vy: 0 }); return; }
+            d0.grab = { pid: hit.id, hist: [], last: 0 }; audio.play('click'); setCursor('hand');
+            this.grabTo(d0, e.clientX * dpr(), e.clientY * dpr());
+          }, 230);
+        }
+      }
     });
     cv.addEventListener('pointermove', (e) => {
       this.mouse = { x: e.clientX * dpr(), y: e.clientY * dpr() };
+      if (drag?.grab) { this.grabTo(drag, e.clientX * dpr(), e.clientY * dpr()); drag.x = e.clientX; drag.y = e.clientY; return; }
       if (drag) {
         const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.moved += Math.abs(dx) + Math.abs(dy);
         if (drag.moved > 5 || drag.button !== 0) { r.pan(dx * dpr() * (this.settings.panSens / 100), dy * dpr() * (this.settings.panSens / 100)); this.follow = null; }
@@ -337,7 +365,13 @@ class App {
       this.updateHover();
     });
     cv.addEventListener('pointerup', (e) => {
-      const d = drag; drag = null;
+      const d = drag; drag = null; clearTimeout(this._grabT);
+      if (d?.grab) { // let go: a quick flick throws them
+        const h = d.grab.hist, now = performance.now(), a = h.find((q) => now - q.t < 140) || h[h.length - 1], b = h[h.length - 1];
+        const dt = a && b ? Math.max(0.03, (b.t - a.t) / 1000) : 1, wx = a && b ? wdx(a.x, b.x, this.session.world.W) / dt : 0, wy = a && b ? (b.y - a.y) / dt : 0;
+        this.session.command({ type: 'drop', vx: wx, vy: wy }); setCursor(this.tool === 'build' ? 'build' : 'pointer');
+        return;
+      }
       if (!d || d.moved > 6) return;
       if (e.button === 2) { this.setTool('inspect'); if (this.possessed) this.session.command({ type: 'ctrl', mx: 0, my: 0, act: 'once', mode: this.possessMode }); return; }
       if (e.button === 0) this.click(e.clientX * dpr(), e.clientY * dpr(), e.shiftKey);
@@ -346,6 +380,7 @@ class App {
       if (e.target.closest?.('input, textarea, select')) return;
       if (document.querySelector('.modal-back') && e.code !== 'Escape') return;
       this.keys.add(e.code);
+      if (this.tool === 'order' && !this.possessed && /^Digit[1-6]$/.test(e.code)) { e.preventDefault(); this.orderKind = ['fight', 'chop', 'mine', 'hunt', 'deconstruct', 'destroy'][+e.code.slice(5) - 1]; this.updateModeChip(); return; }
       if (this.possessed && /^Digit[1-6]$/.test(e.code)) { e.preventDefault(); return this.setPossessMode(['auto', 'punch', 'swing', 'chop', 'mine', 'harvest'][+e.code.slice(5) - 1]); }
       const k = this.settings.keys, act = Object.keys(k).find((a) => k[a] === e.code);
       if (!act || !this.session) { if (e.code === 'Escape' && document.querySelector('.modal-back')) document.querySelector('.modal-back .x')?.click(); return; }
@@ -364,6 +399,7 @@ class App {
         case 'toolBuild': return this.hud.openBuildMenu();
         case 'toolPowers': return this.armPower('rain');
         case 'nation': return this.session.myNation && this.hud.openNation(this.session.myNation.id);
+        case 'orders': return this.setTool(this.tool === 'order' ? 'inspect' : 'order');
         case 'research': return this.session.myNation && this.hud.openNation(this.session.myNation.id, 'research');
         case 'codex': return showCodex();
         case 'settings': return showSettings(this);
@@ -411,6 +447,11 @@ class App {
     const r = this.renderer, w = this.session?.world; if (!w) return;
     const hit = r.pick(sx, sy); if (!hit) return;
     const pos = r.screenToWorld(sx, sy);
+    if (this.tool === 'order' && pos) {
+      const res = await this.session.command({ type: 'order', kind: this.orderKind || 'chop', x: pos[0], y: pos[1] });
+      toast(res.ok ? res.msg : res.msg || 'Nobody can do that.', { sound: res.ok ? 'click' : 'error' });
+      return;
+    }
     if (this.tool === 'power' && this.armed) {
       const P = powerById[this.armed];
       const cmd = { type: 'power', power: P.id };

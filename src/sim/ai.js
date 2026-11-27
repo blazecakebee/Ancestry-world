@@ -9,7 +9,8 @@ import { findPath, tileCost } from './pathfind.js';
 import { addThought, setSituational, gainXp, skillFactor, workSpeed, moveSpeed, isChild, changeOpinion, opinion, fullName, computeFx } from './pawn.js';
 import { needsTending, tend, isBleeding, MED_QUALITY, addDisease } from './health.js';
 import { pawnAttack, ANIMALS } from './combat.js';
-import { settlementBuildings, bCenter, pawnsNear, logEvent, emitFx } from './world.js';
+import { settlementBuildings, bCenter, pawnsNear, logEvent, emitFx, removeBuilding } from './world.js';
+import { doDismantle } from './orders.js';
 import { tempAt, cellAt } from '../world/atmosphere.js';
 import { ignite } from '../world/physics.js';
 import { wrap, dist, dx, clamp } from '../core/util.js';
@@ -582,11 +583,19 @@ export function doJob(world, p, dt, ctx) {
       return done();
     }
     case 'gather': case 'gatherFeat': {
-      if (p.carry && carried(p) >= 8) { if (deliver(world, p, dt, ctx)) return done(); return; }
+      if (p.carry && carried(p) >= 8) { if (deliver(world, p, dt, ctx)) { if (j.vein > 0) { j.i = undefined; return; } return done(); } return; }
       if (j.i === undefined || !(j.feats || [F.BERRY, F.TREE, F.ROCK, F.ORE]).includes(t.feat[j.i])) {
-        if (j.found) { if (p.carry) { j.i = undefined; if (deliver(world, p, dt, ctx)) done(); return; } return done(); }
-        j.i = findFeature(world, p, j.feats || [F.BERRY], 18, rng); j.found = true;
-        if (j.i < 0) { j.i = findFeature(world, p, j.feats || [F.BERRY], 34, rng); if (j.i < 0) return done(); }
+        if (j.found && j.vein > 0) { // ordered to work a whole vein / grove: move on to the next one nearby
+          let bi = -1, bd = 9;
+          for (let oy = -3; oy <= 3; oy++) for (let ox = -3; ox <= 3; ox++) { const yy = Math.floor(j.oy) + oy; if (yy < 0 || yy >= world.H) continue; const k = yy * W + (((Math.floor(j.ox) + ox) % W) + W) % W; if (!j.feats.includes(t.feat[k]) || (t.owner[k] !== -1 && t.owner[k] !== n.id)) continue; const d = ox * ox + oy * oy; if (d < bd) { bd = d; bi = k; } }
+          if (bi >= 0) { j.vein--; j.i = bi; }
+        }
+        if (j.vein !== undefined && j.i !== undefined && j.feats.includes(t.feat[j.i])) { /* keep going */ }
+        else if (j.found) { if (p.carry) { j.i = undefined; if (deliver(world, p, dt, ctx)) done(); return; } return done(); }
+        else {
+          j.i = findFeature(world, p, j.feats || [F.BERRY], 18, rng); j.found = true;
+          if (j.i < 0) { j.i = findFeature(world, p, j.feats || [F.BERRY], 34, rng); if (j.i < 0) return done(); }
+        }
       }
       const x = (j.i % W) + 0.5, y = Math.floor(j.i / W) + 0.5;
       if (!arriveAt(world, p, x, y, dt, 1.3)) return;
@@ -685,6 +694,7 @@ export function doJob(world, p, dt, ctx) {
       }
       return;
     }
+    case 'dismantle': return doDismantle(world, p, dt, ctx, arriveAt, bCenter, removeBuilding, dropItem, workSpeed, skillFactor);
     case 'supply': { // fetch materials from the store and carry them to a construction site
       const b = world.buildings[j.bid]; if (!b || b.built) { if (p.carry) { if (deliver(world, p, dt, ctx)) done(); return; } return done(); }
       if (!p.carry) {

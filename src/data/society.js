@@ -71,6 +71,7 @@ export const THOUGHTS = {
   insulted: { label: 'Was insulted', mood: -5, days: 1, stack: 3 },
   deepTalk: { label: 'Deep conversation', mood: 6, days: 1 },
   friendDied: { label: 'A friend died', mood: -12, days: 6 },
+  thrown: { label: 'Was flung by a god', mood: -6, days: 1, stack: 2 },
   familyDied: { label: 'Family member died', mood: -20, days: 10 },
   sawDeath: { label: 'Witnessed a death', mood: -5, days: 2, stack: 3 },
   newLover: { label: 'New love', mood: 10, days: 6 },

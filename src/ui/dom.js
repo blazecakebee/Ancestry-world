@@ -105,6 +105,29 @@ const wins = new Map();
 let zTop = 10;
 const uiZoom = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui-scale')) || 1;
 /** Keep a window fully reachable inside the viewport (called on open and on resize). */
+/** Move a new window into the free part of the screen: away from the HUD (toolbar, stores list, top bar, power bar,
+ *  chronicle) and from other open windows. Tries a grid of spots and keeps the one with the least overlap. */
+export function placeFree(el, prefX, prefY) {
+  const z = uiZoom(), vw = innerWidth / z, vh = innerHeight / z, M = 8;
+  const rect = (e) => { const r = e.getBoundingClientRect(); return { x: r.left / z, y: r.top / z, w: r.width / z, h: r.height / z }; };
+  const obstacles = [...document.querySelectorAll('.hud-left, .stores, .hud-top, .powerbar, .feed, .players, .possess-bar, .order-bar')].filter((e) => e.offsetParent && !e.classList.contains('closed-hidden')).map(rect)
+    .concat([...wins.values()].filter((o) => o.el !== el).map((o) => rect(o.el)));
+  // the free box between the fixed HUD pieces
+  const top = Math.max(M, ...[...document.querySelectorAll('.hud-top')].map((e) => rect(e).y + rect(e).h + 6));
+  let w = el.offsetWidth, h = el.offsetHeight;
+  if (h > vh - top - M) { h = vh - top - M; el.style.height = h + 'px'; }
+  if (w > vw - 2 * M) { w = vw - 2 * M; el.style.width = w + 'px'; }
+  const over = (x, y) => obstacles.reduce((a, o) => a + Math.max(0, Math.min(x + w, o.x + o.w) - Math.max(x, o.x)) * Math.max(0, Math.min(y + h, o.y + o.h) - Math.max(y, o.y)), 0);
+  let best = null, bs = Infinity;
+  const xs = [], ys = [];
+  for (let x = M; x <= vw - w - M; x += 24) xs.push(x); xs.push(Math.max(M, vw - w - M));
+  for (let y = top; y <= vh - h - M; y += 24) ys.push(y); ys.push(Math.max(top, vh - h - M));
+  for (const x of xs) for (const y of ys) {
+    const sc = over(x, y) * 1000 + Math.hypot(x - prefX, y - prefY);
+    if (sc < bs) { bs = sc; best = [x, y]; }
+  }
+  if (best) { el.style.left = best[0] + 'px'; el.style.top = best[1] + 'px'; }
+}
 export function clampToViewport(el) {
   const z = uiZoom(), vw = innerWidth / z, vh = innerHeight / z, M = 8;
   const w = Math.min(el.offsetWidth, vw - 2 * M), hh = Math.min(el.offsetHeight, vh - 2 * M);
@@ -124,6 +147,7 @@ export function openWindow(id, title, render, { x, y, w = 380, h: ht = 480, icon
     h('div', { class: 'titlebar' }, icon ? (icon instanceof Node ? icon : h('span', { html: icon })) : null, titleEl, h('button', { class: 'btn icon ghost sm', tip: 'Close', onclick: () => win.close() }, '✕')),
     body);
   host.append(el);
+  placeFree(el, x ?? (innerWidth / 2 - w / 2), y ?? 90);
   clampToViewport(el);
   win = {
     id, el, body, render,
