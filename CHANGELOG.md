@@ -13,6 +13,9 @@ Also available in-game: **Main menu → What's New**.
 - **Improved:** Every divine power is now checked by an automated test that casts it and verifies it changes the world.
 - **Improved:** No two kinds of building share a sprite any more: the crafting bench, workshop, tavern, storehouse, shield pylon and reactor got their own art (a ship bar, a tool shack, a watchtower and a small power house among them).
 - **Improved:** The first worship building is an Ancestor Statue.
+- **Balance:** Far fewer trees: new worlds grow about half as many, with a gap between neighbouring trees so forests no longer pile canopies on top of each other, and forests spread back more slowly.
+- **Fixed:** Event notifications now appear to the left of the Stores list instead of sliding under it.
+- **Fixed:** An icon that fails to load now falls back to its drawn glyph instead of showing a broken picture (seen on the Glitter counter).
 
 ## v0.7.2 — Tools, crafting benches and a more varied people (2026-11-27)
 

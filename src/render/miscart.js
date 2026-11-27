@@ -143,9 +143,9 @@ export function iconURL(name, scale = 2) {
 // remapped UI icons are 32px art shown in the same footprint the old 12px glyphs used (sm = 16px, normal = 32px; atlas icons are 16px art so they stay on whole pixels)
 const remapPx = (scale, cls) => (/\bsm\b/.test(cls) ? 16 : 16 * Math.max(1, Math.round(scale)));
 const vaStyle = (name, scale, cls) => (resolve(name) !== name && resolve(name).startsWith('at:') ? `width:${remapPx(scale, cls)}px;height:${remapPx(scale, cls)}px;image-rendering:pixelated` : UI_REMAP[name] ? `width:${remapPx(scale, cls)}px;height:${remapPx(scale, cls)}px;image-rendering:auto` : `width:${16 * scale}px;height:${16 * scale}px;image-rendering:pixelated`);
-export const iconHTML = (name, scale = 2, cls = 'px-icon') => `<img class="${cls}" src="${iconURL(name, scale)}" alt="" draggable="false"${isVA(resolve(name)) ? ` style="${vaStyle(name, scale, cls)}"` : ''}>`;
+export const iconHTML = (name, scale = 2, cls = 'px-icon') => `<img class="${cls}" data-icon="${name}" data-scale="${scale}" src="${iconURL(name, scale)}" alt="" draggable="false"${isVA(resolve(name)) ? ` style="${vaStyle(name, scale, cls)}"` : ''}>`;
 export function iconImg(name, scale = 2, cls = 'px-icon') {
-  const i = document.createElement('img'); i.className = cls; i.src = iconURL(name, scale);
+  const i = document.createElement('img'); i.className = cls; i.dataset.icon = name; i.dataset.scale = scale; i.src = iconURL(name, scale);
   const rn = resolve(name), at = rn.startsWith('at:');
   if (isVA(rn)) { const px = at || UI_REMAP[name] ? remapPx(scale, cls) : 16 * scale; i.style.width = i.style.height = px + 'px'; i.style.imageRendering = !at && UI_REMAP[name] ? 'auto' : 'pixelated'; }
   i.alt = ''; i.draggable = false; return i;
@@ -163,3 +163,9 @@ export function spaceSprite(type) {
     return b.toCanvas();
   });
 }
+
+// Never show a broken picture: if an icon file fails to load (missing, blocked, stale cache), swap in the hand-drawn glyph.
+if (typeof document !== 'undefined') document.addEventListener('error', (e) => {
+  const i = e.target; if (!(i instanceof HTMLImageElement) || !i.dataset.icon || i.dataset.fell) return;
+  i.dataset.fell = '1'; try { i.src = iconCanvas(i.dataset.icon, +i.dataset.scale || 2).toDataURL(); i.style.imageRendering = 'pixelated'; } catch { i.style.visibility = 'hidden'; }
+}, true);

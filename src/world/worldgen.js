@@ -278,13 +278,17 @@ export function generateWorld(seed, W = DEFAULT_W, H = DEFAULT_H, opts = {}) {
   }
 
   // 7) Features: trees, rocks, ore, berries
+  const TREE_DENSITY = 0.5;
   const fr = rng.fork(11);
   for (let i = 0; i < N; i++) {
     const bm = BIOMES[biome[i]];
     if (bm.water || river[i]) continue;
     const r = fr.next();
     let acc = 0;
-    if (r < (acc += bm.tree || 0)) { feat[i] = F.TREE; featHp[i] = fr.int(3, 6); }
+    // trees: well under half the old density, and never crowding the tile above/left of them, so forests read as
+    // groves with room between the trunks instead of one stacked carpet of canopies
+    const crowded = (i % W > 0 && feat[i - 1] === F.TREE) || (i >= W && feat[i - W] === F.TREE) || (i >= W + 1 && feat[i - W - 1] === F.TREE);
+    if (r < (acc += (bm.tree || 0) * TREE_DENSITY)) { if (!crowded || fr.next() < 0.12) { feat[i] = F.TREE; featHp[i] = fr.int(3, 6); } }
     else if (r < (acc += bm.rock || 0)) { feat[i] = F.ROCK; featHp[i] = fr.int(4, 10); }
     else if (r < (acc += bm.ore || 0)) { feat[i] = F.ORE; featHp[i] = fr.int(6, 14); }
     else if (r < (acc += bm.berry || 0)) { feat[i] = F.BERRY; featHp[i] = fr.int(3, 6); }

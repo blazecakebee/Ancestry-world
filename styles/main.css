@@ -211,7 +211,7 @@ a { color: var(--accent); text-decoration: none; font-weight: 600; } a:hover { t
 .tier-sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 4px; flex: none; }
 
 /* ---------- right column: co-op players + notification cards ---------- */
-.hud-right { position: absolute; right: calc(12px + var(--edge-pad)); top: 76px; width: 300px; max-width: calc(100% - 24px); max-height: calc(100% - 100px); display: flex; flex-direction: column; gap: 8px; pointer-events: none; overflow: hidden; }
+.hud-right { position: absolute; right: calc(232px + var(--edge-pad)); top: 76px; width: 300px; max-width: calc(100% - 256px); max-height: calc(100% - 100px); display: flex; flex-direction: column; gap: 8px; pointer-events: none; overflow: hidden; }
 .hud-right > * { pointer-events: auto; }
 .hud-right .notifs { pointer-events: none; }
 .notifs { display: flex; flex-direction: column; gap: 7px; align-items: stretch; }

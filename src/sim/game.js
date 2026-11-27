@@ -145,7 +145,8 @@ export class Game {
           if (r < (bm.berry || 0) * 2) { t.feat[i] = F.BERRY; t.featHp[i] = 4; w.dirty.add(i); }
           else if (t.owner[i] < 0) {
             let nb = 0; for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const yy = y + oy; if (yy >= 0 && yy < w.H && t.feat[yy * w.W + wrap(x + ox, w.W)] === F.TREE) nb++; }
-            if (r < (bm.tree || 0) * nb * 0.12) { t.feat[i] = F.TREE; t.featHp[i] = 3; w.dirty.add(i); }
+            const crowd = [[1, 1], [-1, -1], [1, -1], [-1, 1]].some(([ox, oy]) => { const yy = y + oy; return yy >= 0 && yy < w.H && t.feat[yy * w.W + wrap(x + ox, w.W)] === F.TREE; });
+            if (nb <= 2 && !crowd && r < (bm.tree || 0) * nb * 0.05) { t.feat[i] = F.TREE; t.featHp[i] = 3; w.dirty.add(i); } // forests spread slowly and keep gaps
           }
         } else if (t.feat[i] === F.BERRY && t.featHp[i] < 6 && rng.chance(dt * 2)) t.featHp[i]++;
         if (t.burnt[i] > 0) { t.burnt[i] = Math.max(0, t.burnt[i] - Math.ceil(dt * 120 * eco)); if (!t.burnt[i]) w.dirty.add(i); }
