@@ -206,11 +206,21 @@ class App {
       this.showUpdateBanner(v);
     } catch (e) { /* offline or dev server: ignore */ }
   }
+  // A plain reload can keep serving the old files from the HTTP cache; refresh them all first, then reload.
+  async reloadFresh(btn) {
+    if (btn) { btn.disabled = true; btn.textContent = 'Updating…'; }
+    try {
+      const r = await fetch('version.json?' + Date.now(), { cache: 'no-store' });
+      const files = (await r.json())?.files || [];
+      await Promise.all([...files, 'version.json'].map((f) => fetch(f, { cache: 'reload' }).catch(() => {})));
+    } catch (e) { /* fall through to a normal reload */ }
+    location.reload();
+  }
   showUpdateBanner(v) {
     if (this._banner) { if (this._banner.dataset.v === v) return; this._banner.remove(); }
     const b = h('div', { class: 'update-banner glass', role: 'alert', 'data-v': v },
       iconImg('star', 2, 'px-icon sm'), h('span', {}, `New update is out (v${v}) — please reload`),
-      h('button', { class: 'btn sm primary', onclick: () => location.reload() }, 'Reload'),
+      h('button', { class: 'btn sm primary', onclick: (e) => this.reloadFresh(e.currentTarget) }, 'Reload'),
       h('button', { class: 'btn sm ghost icon', 'aria-label': 'Dismiss for this session', tip: 'Dismiss for this session', onclick: () => { this._bannerDismissed = v; b.remove(); this._banner = null; } }, '✕'));
     document.body.append(b); this._banner = b;
   }
