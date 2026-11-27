@@ -8,4 +8,5 @@ for (const v of CHANGELOG) {
   for (const [t, text] of v.notes) md += `- **${label[t]}:** ${text}\n`;
 }
 writeFileSync(new URL('../CHANGELOG.md', import.meta.url), md);
-console.log('CHANGELOG.md written');
+writeFileSync(new URL('../version.json', import.meta.url), JSON.stringify({ version: CHANGELOG[0].version }) + '\n');
+console.log('CHANGELOG.md + version.json written');

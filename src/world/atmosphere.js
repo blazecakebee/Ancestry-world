@@ -186,7 +186,7 @@ export function stepAtmosphere(a, world, dt, rng, events) {
 
   // 6) lightning & gusts
   for (let c = 0; c < G; c++) {
-    if ((a.storm[c] === STORM.THUNDER || a.storm[c] === STORM.CYCLONE) && rng.chance(dt * 2.5)) {
+    if ((a.storm[c] === STORM.THUNDER || a.storm[c] === STORM.CYCLONE) && rng.chance(dt * 0.12)) {
       const x = (c % GW) * CS + rng.int(0, CS - 1), y = ((c / GW) | 0) * CS + rng.int(0, CS - 1);
       events.push({ type: 'lightning', x, y });
     }

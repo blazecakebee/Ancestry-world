@@ -156,3 +156,14 @@ dataset's license is unknown — check it before publishing. Choose it under *Se
 ## Roadmap ideas
 Boats and naval trade, vehicles and mechs on the map, deeper offworld gameplay (visiting moon colonies),
 caravans between nations, more animal species and taming, deeper religion/culture systems, mod support.
+
+## Art credits
+
+- Character, tree, pet, slime, tent and prop art: GandalfHardcore "Emojis and Icons" packs (used in-game; the raw packs are not redistributable as such).
+- Fire and smoke: Pixel Fire Asset Pack.
+- Skill and buff icons: VerArc Stash "Basic Skills and Buffs".
+- Effects: Super Pixel Effects Gigapack (free version) — see `assets/packs/fx/license.txt` (attribution required).
+- Moon and planet lighting: Deep-Fold PixelPlanets (MIT) — `assets/packs/pixelplanets/LICENSE-PixelPlanets-MIT.txt`.
+- Cloud saves use Google Identity Services and the Drive API (appDataFolder scope); the OAuth client id in `src/ui/cloud.js` is public by design.
+- Animals, crops and solar-system planet icons: LimeZu "Modern Farm" (limezu.itch.io) — see `assets/packs/farm/LICENSE-ModernFarm.txt` (credit requested; not redistributable as a standalone asset pack).
+- Some power icons: "Free - Raven Fantasy Icons" (Raven Fantasy); skill/buff icons: VerArc Stash.

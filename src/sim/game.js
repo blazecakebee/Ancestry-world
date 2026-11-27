@@ -10,7 +10,7 @@ import { stepSettlement, stepNation, spawnNomads } from './nation.js';
 import { stepDiplomacy, stepWarfare } from './war.js';
 import { stepAnimals } from './animals.js';
 import { stepStoryteller, stepWorldAge, handleWorldEvents } from './events.js';
-import { applyCommand } from './commands.js';
+import { applyCommand, refreshBuffs } from './commands.js';
 import { buildSpatial, logEvent, emitFx, pawnsNear, DAY_SECONDS } from './world.js';
 import { pawnAttack } from './combat.js';
 import { dist, wrap } from '../core/util.js';
@@ -76,6 +76,7 @@ export class Game {
         const nm = mults[p.nationId]?.moodBonus || 0;
         import_updateMood(p, w.time, dt * 3, nm);
       }
+      if (tick % 30 === 0 && p.buff.fxOn) refreshBuffs(w, p); // expire/re-apply divine buffs (haste, ward, fervor...)
       if (p.raider) { this.stepRaider(p, dt); continue; }
       if (!s && !p.possessedBy && !p.squad) { // homeless wanderer: rejoin nearest settlement of own nation
         const home = Object.values(w.settlements).find((x) => x.nationId === p.nationId);

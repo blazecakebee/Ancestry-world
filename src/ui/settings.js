@@ -36,7 +36,9 @@ export const DEFAULTS = {
   uiScale: 100, textScale: 100, edgePad: 0,
   autoPause: { war: true, era: true, disaster: false, favoriteDeath: true },
   speeds: [0.5, 1, 2, 3, 5],
-  autosaveMin: 5, autosaveSlots: 3,
+  autosaveMin: 5, autosaveEvery: 2, autosaveSlots: 3, // autosaveEvery: minutes, 0 = off (autosaveMin is legacy)
+  cloudAuto: true, // when signed in with Google, copy every save/autosave to your Drive app folder
+  powerCat: 'divine', toolbarCollapsed: false, chronicleCollapsed: null,
   edgeScroll: false, panSens: 100, zoomSens: 100, zoomToCursor: true,
   feedFilters: { birth: true, death: true, social: true, war: true, peace: true, nation: true, era: true, disaster: true, weather: true, miracle: true, good: true, bad: true, break: false, faith: true, space: true, age: true, system: true, chat: true },
   tooltipDelay: 250, colorblind: 'none', shake: 100, flash: 100, particles: 100, bgFps: 15, pixelSnap: true,

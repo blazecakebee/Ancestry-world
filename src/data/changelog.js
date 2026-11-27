@@ -2,6 +2,37 @@
 // tags: 'new' | 'improved' | 'fixed' | 'balance'
 export const CHANGELOG = [
   {
+    version: '0.4.0', date: '2026-11-27', title: 'Banners, clouds and a fresh coat of icons',
+    notes: [
+      ['new', 'Google sign-in and Cloud Saves (main menu): saves are copied into a private app folder in your own Google Drive, so you can pick up your worlds on any device. Auto-sync on every save/autosave, or upload/download/delete by hand.'],
+      ['new', 'Flag designer: 32 patterns (up from 13) and about 60 emblems (up from 13), plus emblem position (centre, hoist, canton, fly), three sizes, emblem outline, mirrored patterns and a "Surprise me" button.'],
+      ['new', 'Ducks join the creatures: a new power, plus ducklings, with new Modern Farm art.'],
+      ['new', 'More Modern Farm art in play: calves, lambs, piglets, kids, bunnies, chicks, foals and ducklings now appear in herds; roosters and many more coat colours for every animal; 18 crop types (corn, tomatoes, grapes, pineapples, pumpkins and more) with tall plants grow on farms.'],
+      ['improved', 'Every sidebar, dock, overlay and HUD icon was redrawn with the newer Raven fantasy-icon art. The toolbar is slightly wider so labels fit.'],
+    ],
+  },
+  {
+    version: '0.3.0', date: '2026-11-27', title: 'A prettier, bigger world',
+    notes: [
+      ['new', 'New art from the Gandalf, Pixel Fire, VerArc and Super Pixel Effects packs: layered characters (humans, elves and orcs kept), trees, pets and slimes, tents, campfires and props.'],
+      ['new', 'LimeZu Modern Farm art: animated cows, sheep, dogs, cats and donkeys (horses) walk and idle; real crop plants with growth stages on farms; distant solar-system planets (lava, ice, barren, terran, black hole) behind the globe.'],
+      ['new', 'Powers play animated Super Pixel Effects bursts in their own colour; each creature power has its own VerArc icon; portraits use the new characters; credits updated.'],
+      ['new', 'Five new creature powers: cows, pigs, goats, chickens and rabbits.'],
+      ['new', 'Waves-style sea: rolling shore foam, wet-sand wash, wave glints, whales, dolphins, rays, jellyfish, fish shoals and gulls.'],
+      ['new', 'Lots more grass tufts, bushes, pebbles and boulders across the land.'],
+      ['new', '30 more god powers, creature spawning, and skill/buff icons on every power. Cursor takes the colour of the armed power and previews its radius.'],
+      ['new', 'Continue button for your latest save, autosave, and a "new update is out" banner with a reload button.'],
+      ['new', 'Nation colour is now a simple colour wheel. Left toolbar shows labels. Bottom bar is split into sections.'],
+      ['new', 'Passive trickle of glitter from your people.'],
+      ['improved', 'Buildings drawn much bigger than before; creatures and pawns scaled up so they read at a glance.'],
+      ['improved', 'Real smoke and Pixel Fire flames replace the old burning-tree puffs.'],
+      ['improved', 'The moon is rebuilt with Deep-Fold\'s PixelPlanets shader (dithered lighting, craters); the planet gets dithered pixel-art lighting, ocean glints and an atmosphere rim. Zooming out bends the flat map into the globe gradually.'],
+      ['improved', 'Notifications for important events; the Chronicle is smaller and keeps the minor lore.'],
+      ['improved', 'Rain, thunder and ambience are much quieter; thunder flashes are rarer and gentler.'],
+      ['fixed', 'Flag icon and trait tooltip no longer flicker; the tutorial card stays on screen.'],
+    ],
+  },
+  {
     version: '0.2.1', date: '2026-11-26', title: 'The Chronicle of Updates',
     notes: [
       ['new', 'Update Log: see every change from the main menu ("What\'s New"), with a badge when something new has landed.'],

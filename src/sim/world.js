@@ -85,9 +85,9 @@ export function foundNation(world, site, { ai = true, ownerId = null, name, colo
 }
 
 export function defaultFlag(rng, color) {
-  return { pattern: rng.pick(['solid', 'bicolorH', 'bicolorV', 'tricolorV', 'cross', 'canton', 'chevron', 'saltire']),
+  return { pattern: rng.pick(['solid', 'bicolorH', 'bicolorV', 'tricolorV', 'cross', 'canton', 'chevron', 'saltire', 'nordic', 'stripes', 'fess', 'pale', 'pall', 'checker', 'disc', 'sunburst', 'wedge', 'frame']),
     c1: color || '#e8c547', c2: rng.pick(['#1b1f3a', '#f4f1e8', '#8b1e2d', '#1f5f3a', '#2a4d8f']), c3: rng.pick(['#f4f1e8', '#e8c547', '#111111']),
-    emblem: rng.pick(['sun', 'moon', 'star', 'tree', 'mountain', 'eye', 'wave', 'crown', 'none']), ec: '#f8e7a0' };
+    emblem: rng.pick(['sun', 'moon', 'star', 'tree', 'mountain', 'eye', 'wave', 'crown', 'dove', 'shield', 'star5', 'star8', 'crescent', 'sunrays', 'anchor', 'fleur', 'none']), ec: '#f8e7a0', ep: 'c', es: 0.85, eo: 0, em: 0 };
 }
 
 export function foundSettlement(world, nation, x, y, capital = false) {

@@ -173,6 +173,12 @@ export function stepNation(world, n, dt, rng) {
   const pawns = n._pawns || [];
   n.stats.peak = Math.max(n.stats.peak, pawns.length);
   if (!pawns.length) return killNation(world, n, 'faded away');
+  // a patron's quiet blessing: a tiny trickle of glitter (more with temples), far below real worship income
+  if (n.ownerId) {
+    let temples = 0;
+    for (const s of Object.values(world.settlements)) if (s.nationId === n.id) temples += settlementBuildings(world, s, 'temple').length;
+    n.glitter += Math.min(0.09, 0.04 + temples * 0.005) * dt;
+  }
   // era research
   const next = ERAS[n.era + 1];
   if (next && n.research >= next.cost) {

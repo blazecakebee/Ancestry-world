@@ -1,7 +1,7 @@
 // Wildlife: herds graze, predators hunt the lonely, megafauna roam the Stone Age.
 import { ANIMALS, animalAttack } from './combat.js';
 import { tileCost } from './pathfind.js';
-import { pawnsNear } from './world.js';
+import { pawnsNear, emitFx } from './world.js';
 import { wrap, dist, dx } from '../core/util.js';
 import { CHUNK } from '../world/physics.js';
 
@@ -28,13 +28,19 @@ export function stepAnimals(world, dt, rng, hotChunks) {
   for (const a of all) {
     const A = ANIMALS[a.kind];
     if (a.dead) { a.rot = (a.rot || 0) + dt; if (a.rot > 3) delete world.animals[a.id]; continue; }
-    if (a.hp <= 0) { a.dead = true; world.fx.push({ type: 'animalDeath', aid: a.id, t: world.time }); continue; }
+    if (a.hp <= 0) {
+      a.dead = true; world.fx.push({ type: 'animalDeath', aid: a.id, t: world.time });
+      // spirits and slimes leave a little glitter for whoever's people felled them (player nations only)
+      const killer = A.glitter && a.lastAttacker ? world.pawns[a.lastAttacker] : null, kn = killer && world.nations[killer.nationId];
+      if (kn && kn.ownerId) { kn.glitter += A.glitter; emitFx(world, { type: 'glitter', x: a.x, y: a.y - 0.5, amount: Math.ceil(A.glitter) }); }
+      continue;
+    }
     a.moving = false;
     // hunt / defend
     let target = a.angry ? world.pawns[a.angry] : null;
     if (target && (target.dead || dist(a.x, a.y, target.x, target.y, W) > 14)) { a.angry = null; target = null; }
     if (!target && A.predator && rng.chance(dt * 0.35)) {
-      const prey = pawnsNear(world, a.x, a.y, 8).filter((p) => !p.dead);
+      const prey = pawnsNear(world, a.x, a.y, 8).filter((p) => !p.dead && p.nationId !== a.patron); // summoned beasts spare their patron's people
       if (prey.length === 1 || (prey.length && prey.length < 3 && rng.chance(0.3))) { a.angry = prey[0].id; target = prey[0]; }
     }
     if (target) {
@@ -45,19 +51,22 @@ export function stepAnimals(world, dt, rng, hotChunks) {
     }
     // flee from people
     const near = pawnsNear(world, a.x, a.y, 4)[0];
-    if (near && !A.predator) { const d = Math.max(0.1, dist(a.x, a.y, near.x, near.y, W)); move(world, a, -dx(a.x, near.x, W) / d, -(near.y - a.y) / d, A.speed * dt); continue; }
+    if (near && !A.predator && !A.friendly) { const d = Math.max(0.1, dist(a.x, a.y, near.x, near.y, W)); move(world, a, -dx(a.x, near.x, W) / d, -(near.y - a.y) / d, A.speed * dt); continue; }
     // graze & wander
     a.t -= dt;
     if (a.t <= 0) { a.t = rng.range(0.05, 0.25); const ang = rng.next() * Math.PI * 2; a.vx = rng.chance(0.4) ? 0 : Math.cos(ang); a.vy = rng.chance(0.4) ? 0 : Math.sin(ang); }
     if (a.vx || a.vy) move(world, a, a.vx, a.vy, A.speed * 0.35 * dt);
-    if (rng.chance(dt * 0.05)) { const ps = pawnsNear(world, a.x, a.y, 50); if (!ps.length && rng.chance(0.5)) delete world.animals[a.id]; } // despawn far from people
+    if (A.glitter && !a.patron && rng.chance(dt * 0.4)) emitFx(world, { type: 'glitter', x: a.x, y: a.y - 0.6, amount: 0 }); // wisps and slimes shimmer
+    if (!a.patron && rng.chance(dt * 0.05)) { const ps = pawnsNear(world, a.x, a.y, 50); if (!ps.length && rng.chance(0.5)) delete world.animals[a.id]; } // despawn far from people
   }
 }
 
 function move(world, a, ux, uy, step) {
   const nx = wrap(a.x + ux * step, world.W), ny = Math.min(world.H - 1, Math.max(1, a.y + uy * step));
   const i = Math.floor(ny) * world.W + Math.floor(nx);
-  if (tileCost(world.tiles, i) > 0 && world.tiles.owner[i] === -1 || tileCost(world.tiles, i) > 0 && a.angry) { a.x = nx; a.y = ny; a.moving = true; }
+  const A = ANIMALS[a.kind], own = world.tiles.owner[i], cost = tileCost(world.tiles, i);
+  // wild beasts keep to unowned land; summoned ones may also roam their patron's land; spirits and birds go anywhere on land
+  if (cost > 0 && (own === -1 || a.angry || A.float || (a.patron && own === a.patron))) { a.x = nx; a.y = ny; a.moving = true; }
   else { a.vx = -a.vx; a.vy = -a.vy; }
   if (ux) a.facing = ux > 0 ? 1 : -1;
 }

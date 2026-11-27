@@ -19,7 +19,25 @@ export function h(tag, attrs = {}, ...kids) {
     else el.setAttribute(k, v === true ? '' : v);
   }
   for (const k of kids.flat(Infinity)) { if (k === null || k === undefined || k === false) continue; el.append(k instanceof Node ? k : document.createTextNode(String(k))); }
+  if (tag === 'input' && el.type === 'range') syncRange(el);
   return el;
+}
+/** Keep the --pct CSS variable (filled part of a slider track) in sync with the value. */
+export function syncRange(el) {
+  const min = +el.min || 0, max = el.max === '' ? 100 : +el.max, v = +el.value;
+  el.style.setProperty('--pct', `${max > min ? ((v - min) / (max - min)) * 100 : 0}%`);
+}
+document.addEventListener('input', (e) => { if (e.target?.type === 'range') syncRange(e.target); }, true);
+
+/** "2 hours ago" style relative time. */
+export function timeAgo(ms) {
+  const s = Math.max(0, (Date.now() - ms) / 1000);
+  if (s < 45) return 'just now';
+  const u = [[60, 'minute'], [3600, 'hour'], [86400, 'day'], [604800, 'week'], [2629800, 'month'], [31557600, 'year']];
+  let best = u[0];
+  for (const x of u) if (s >= x[0]) best = x;
+  const n = Math.max(1, Math.floor(s / best[0]));
+  return `${n} ${best[1]}${n > 1 ? 's' : ''} ago`;
 }
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -63,6 +81,9 @@ export function wireTooltips(getDelay) {
     }, getDelay());
   });
   document.addEventListener('pointerdown', hide);
+  document.addEventListener('pointerout', (e) => { if (target && !e.relatedTarget) hide(); });
+  document.addEventListener('scroll', hide, true);
+  setInterval(() => { if (target && !target.isConnected) hide(); }, 400);
 }
 
 // ---------- modals ----------
@@ -82,6 +103,17 @@ export function modal(title, body, { width, onClose, icon } = {}) {
 // ---------- draggable / resizable windows ----------
 const wins = new Map();
 let zTop = 10;
+const uiZoom = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui-scale')) || 1;
+/** Keep a window fully reachable inside the viewport (called on open and on resize). */
+export function clampToViewport(el) {
+  const z = uiZoom(), vw = innerWidth / z, vh = innerHeight / z, M = 8;
+  const w = Math.min(el.offsetWidth, vw - 2 * M), hh = Math.min(el.offsetHeight, vh - 2 * M);
+  if (el.offsetWidth > w) el.style.width = w + 'px';
+  if (el.offsetHeight > hh) el.style.height = hh + 'px';
+  el.style.left = Math.max(M, Math.min(vw - w - M, el.offsetLeft)) + 'px';
+  el.style.top = Math.max(M, Math.min(vh - hh - M, el.offsetTop)) + 'px';
+}
+addEventListener('resize', () => { for (const w of wins.values()) clampToViewport(w.el); });
 export function openWindow(id, title, render, { x, y, w = 380, h: ht = 480, icon, onClose } = {}) {
   let win = wins.get(id);
   if (win) { win.render = render; win.setTitle(title); win.update(); win.focus(); return win; }
@@ -92,10 +124,22 @@ export function openWindow(id, title, render, { x, y, w = 380, h: ht = 480, icon
     h('div', { class: 'titlebar' }, icon ? (icon instanceof Node ? icon : h('span', { html: icon })) : null, titleEl, h('button', { class: 'btn icon ghost sm', tip: 'Close', onclick: () => win.close() }, '✕')),
     body);
   host.append(el);
+  clampToViewport(el);
   win = {
     id, el, body, render,
     setTitle: (t) => { titleEl.textContent = t; },
-    update() { try { const scroll = body.scrollTop; const out = win.render(body, win); if (out instanceof Node) { body.replaceChildren(out); } body.scrollTop = scroll; } catch (e) { console.error(e); } },
+    update() {
+      try {
+        const scroll = body.scrollTop; const out = win.render(body, win);
+        if (out instanceof Node) {
+          // only touch the DOM when something actually changed: stops flicker and keeps tooltips/hover alive
+          let sig = out.outerHTML || '';
+          for (const c of out.querySelectorAll?.('canvas') || []) { try { const u = c.toDataURL(); sig += '|' + u.length + u.slice(-48); } catch (e) { sig += '|c'; } }
+          if (sig !== win._sig || !body.firstChild) { win._sig = sig; body.replaceChildren(out); }
+        }
+        body.scrollTop = scroll;
+      } catch (e) { console.error(e); }
+    },
     focus() { el.style.zIndex = ++zTop; for (const o of wins.values()) o.el.classList.toggle('focused', o === win); },
     close() { el.remove(); wins.delete(id); audio.play('close'); onClose?.(); },
   };
@@ -107,7 +151,7 @@ export function openWindow(id, title, render, { x, y, w = 380, h: ht = 480, icon
     win.focus();
     const z = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui-scale')) || 1;
     const sx = e.clientX, sy = e.clientY, ox = el.offsetLeft, oy = el.offsetTop;
-    const mv = (ev) => { el.style.left = Math.max(-el.offsetWidth + 60, Math.min(innerWidth / z - 60, ox + (ev.clientX - sx) / z)) + 'px'; el.style.top = Math.max(0, Math.min(innerHeight / z - 40, oy + (ev.clientY - sy) / z)) + 'px'; };
+    const mv = (ev) => { el.style.left = Math.max(0, Math.min(innerWidth / z - Math.min(el.offsetWidth, 120), ox + (ev.clientX - sx) / z)) + 'px'; el.style.top = Math.max(0, Math.min(innerHeight / z - 40, oy + (ev.clientY - sy) / z)) + 'px'; };
     const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); };
     addEventListener('pointermove', mv); addEventListener('pointerup', up);
   });
@@ -124,3 +168,80 @@ export function tabs(names, current, onPick) {
   return h('div', { class: 'tabs' }, names.map(([id, label]) => h('button', { class: id === current ? 'on' : '', onclick: () => onPick(id) }, label)));
 }
 export function bar(v, cls = '') { return h('div', { class: `bar ${cls}` }, h('i', { style: { width: `${Math.max(0, Math.min(100, v * 100))}%` } })); }
+
+
+// ---------- colour wheel ----------
+export const COLOR_PRESETS = ['#e8c547', '#4fb0ff', '#ff6b6b', '#7ee081', '#c58cff', '#ff9f43', '#4ee6d4', '#f4f1e8'];
+function hsv2rgb(hh, ss, vv) {
+  const f = (n) => { const k = (n + hh / 60) % 6; return vv - vv * ss * Math.max(0, Math.min(k, 4 - k, 1)); };
+  return [Math.round(f(5) * 255), Math.round(f(3) * 255), Math.round(f(1) * 255)];
+}
+function rgb2hsv(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  let hh = 0;
+  if (d) hh = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [hh * 60, mx ? d / mx : 0, mx];
+}
+const toHex = ([r, g, b]) => '#' + [r, g, b].map((x) => x.toString(16).padStart(2, '0')).join('');
+const parseHex = (x) => { const m = /^#?([0-9a-f]{6})$/i.exec((x || '').trim()); if (!m) return null; const n = parseInt(m[1], 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
+/** One simple colour control: HSV wheel (hue = angle, saturation = radius) + brightness slider + hex box + presets.
+ *  Returns an element with .setValue(hex) / .getValue(). */
+export function colorWheel({ value = '#e8c547', onChange } = {}) {
+  const SIZE = 148, R = SIZE / 2;
+  let [H, S, V] = rgb2hsv(...(parseHex(value) || [232, 197, 71]));
+  const cv = h('canvas', { width: SIZE, height: SIZE, class: 'cw-canvas' });
+  const ctx = cv.getContext('2d');
+  const knob = h('div', { class: 'cw-knob' });
+  const wheelBox = h('div', { class: 'cw-wheel' }, cv, knob);
+  const chip = h('div', { class: 'cw-chip' });
+  const hex = h('input', { type: 'text', class: 'cw-hex', maxlength: 7, spellcheck: 'false', 'aria-label': 'Hex colour' });
+  const vSlider = h('input', { type: 'range', min: 0, max: 100, value: Math.round(V * 100), class: 'cw-v', 'aria-label': 'Brightness' });
+  const draw = () => {
+    const img = ctx.createImageData(SIZE, SIZE), d = img.data;
+    for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
+      const dx = x + 0.5 - R, dy = y + 0.5 - R, r = Math.hypot(dx, dy), i = (y * SIZE + x) * 4;
+      if (r > R) continue;
+      const [rr, gg, bb] = hsv2rgb(((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360, Math.min(1, r / (R - 1)), V);
+      d[i] = rr; d[i + 1] = gg; d[i + 2] = bb; d[i + 3] = r > R - 1 ? Math.max(0, (R - r) * 255) : 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  };
+  const current = () => toHex(hsv2rgb(H, S, V));
+  const paint = (emit, redrawWheel = true) => {
+    const c = current();
+    if (redrawWheel) draw();
+    const a = (H * Math.PI) / 180;
+    knob.style.left = `${R + Math.cos(a) * S * (R - 1)}px`; knob.style.top = `${R + Math.sin(a) * S * (R - 1)}px`;
+    knob.style.background = c; chip.style.background = c;
+    if (document.activeElement !== hex) hex.value = c;
+    vSlider.value = Math.round(V * 100); syncRange(vSlider);
+    vSlider.style.setProperty('--cw-top', toHex(hsv2rgb(H, S, 1)));
+    if (emit) onChange?.(c);
+  };
+  const pick = (e) => {
+    const r = cv.getBoundingClientRect(), sc = SIZE / r.width;
+    const dx = (e.clientX - r.left) * sc - R, dy = (e.clientY - r.top) * sc - R;
+    H = ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360; S = Math.min(1, Math.hypot(dx, dy) / (R - 1));
+    if (V < 0.05) V = 0.6;
+    paint(true, false);
+  };
+  wheelBox.addEventListener('pointerdown', (e) => { wheelBox.setPointerCapture(e.pointerId); wheelBox._drag = true; pick(e); });
+  wheelBox.addEventListener('pointermove', (e) => { if (wheelBox._drag) pick(e); });
+  wheelBox.addEventListener('pointerup', () => { wheelBox._drag = false; });
+  vSlider.addEventListener('input', () => { V = +vSlider.value / 100; paint(true); });
+  hex.addEventListener('input', () => { const rgb = parseHex(hex.value); if (rgb) { [H, S, V] = rgb2hsv(...rgb); paint(true); } hex.classList.toggle('bad', !rgb); });
+  hex.addEventListener('keydown', (e) => e.stopPropagation());
+  hex.addEventListener('blur', () => { hex.classList.remove('bad'); hex.value = current(); });
+  const presets = h('div', { class: 'cw-presets' }, COLOR_PRESETS.map((c) => h('button', { type: 'button', class: 'swatch', style: { background: c }, 'aria-label': c, onclick: () => { [H, S, V] = rgb2hsv(...parseHex(c)); paint(true); } })));
+  const el = h('div', { class: 'colorwheel' },
+    wheelBox,
+    h('div', { class: 'cw-side' },
+      h('div', { class: 'cw-row' }, chip, hex),
+      h('div', { class: 'cw-label' }, 'Brightness'), vSlider,
+      h('div', { class: 'cw-label' }, 'Quick picks'), presets));
+  el.setValue = (v) => { const rgb = parseHex(v); if (!rgb) return; [H, S, V] = rgb2hsv(...rgb); paint(false); };
+  el.getValue = current;
+  paint(false);
+  return el;
+}

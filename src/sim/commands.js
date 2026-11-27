@@ -6,9 +6,14 @@ import { BUILDINGS } from '../data/buildings.js';
 import { AXES } from '../data/society.js';
 import { B, BIOMES, F } from '../data/biomes.js';
 import { startInspiration } from './ai.js';
-import { addThought, computeFx, fullName } from './pawn.js';
-import { DISEASES } from './health.js';
+import { addThought, computeFx, fullName, gainXp } from './pawn.js';
+import { DISEASES, addDisease, injure } from './health.js';
 import { makeProphet } from './nation.js';
+import { ANIMALS } from './combat.js';
+import { tileCost } from './pathfind.js';
+import { ignite } from '../world/physics.js';
+import { meteor } from './events.js';
+import { SKILLS } from '../data/society.js';
 import { canPlace, placeBuilding, removeBuilding, foundNation, takeSite, logEvent, emitFx, settlementBuildings, bCenter } from './world.js';
 import { rel, setWar, setPeace, setAlliance } from './war.js';
 import { CS, cellAt } from '../world/atmosphere.js';
@@ -93,7 +98,7 @@ export function applyCommand(world, pid, cmd, rng) {
     case 'flag': {
       if (!me) return fail();
       const f = cmd.flag || {}; const hex = (c) => (/^#[0-9a-fA-F]{6}$/.test(c) ? c : '#ffffff');
-      me.flag = { pattern: String(f.pattern).slice(0, 16), c1: hex(f.c1), c2: hex(f.c2), c3: hex(f.c3), emblem: String(f.emblem).slice(0, 16), ec: hex(f.ec) };
+      me.flag = { pattern: String(f.pattern).slice(0, 16), c1: hex(f.c1), c2: hex(f.c2), c3: hex(f.c3), emblem: String(f.emblem).slice(0, 16), ec: hex(f.ec), ep: ['c', 'h', 't', 'f'].includes(f.ep) ? f.ep : 'c', es: clamp(+f.es || 0.85, 0.4, 1.3), eo: f.eo ? 1 : 0, em: f.em ? 1 : 0 };
       me.flagSet = true;
       if (cmd.name) me.name = String(cmd.name).slice(0, 32);
       if (cmd.color) me.color = hex(cmd.color);
@@ -193,7 +198,10 @@ function castPower(world, pid, me, cmd, rng) {
     const r = P.radius || 0, seen = new Set();
     for (let oy = -r; oy <= r; oy += Math.max(1, r)) for (let ox = -r; ox <= r; ox += Math.max(1, r)) { const y = clamp(ty + oy, 0, world.H - 1); seen.add(world.tiles.owner[y * world.W + wrap(tx + ox, world.W)]); }
     for (const o of seen) if (!allowed(world, pid, o, 'miracles')) return fail(`That land belongs to ${world.nations[o]?.name}. Divine powers need their permission.`);
-  } else nid = me.id;
+  } else {
+    nid = me.id;
+    const cap = world.settlements[me.capitalId]; if (cap) { tx = cap.x; ty = cap.y; } // 'self' powers are centred on the capital
+  }
   if (P.target !== 'tile' && !allowed(world, pid, nid, 'miracles')) return fail(nid > 0 ? `${world.nations[nid]?.name} has not permitted your miracles.` : 'Not permitted.');
 
   const s = P.target === 'settlement' ? target : null;
@@ -248,11 +256,269 @@ function castPower(world, pid, me, cmd, rng) {
     }
     case 'orbshield': s.until.shield = now + 6; break;
     case 'prophecy': if (target.age < 18) return fail('Too young to preach.'); makeProphet(world, target); break;
+    default: { const err = miracle({ world, pid, me, rng, P, tx, ty, target, s, now, cmd }); if (err) return fail(err); }
   }
   me.glitter -= P.cost; me.cooldowns[P.id] = now + P.cd; me.stats.miracles++;
   for (const p of witnesses(tx, ty, 10)) if (p.nationId === nid || nid === -1) { addThought(p, 'miracle', now); me.devotion += 0.4; }
   const who = target && target.name ? (target.family ? fullName(target) : target.name) : null;
   logEvent(world, 'miracle', `${world.players[pid]?.name || me.name}'s ${P.name}${who ? ' upon ' + who : ''}.`, { nationId: me.id, x: tx, y: ty, power: P.id });
-  emitFx(world, { type: 'power', power: P.id, x: tx, y: ty, r: P.radius || (s ? s.radius : 1.5), nationId: me.id, pid: target?.look ? target.id : undefined });
+  emitFx(world, { type: 'power', power: P.id, x: tx, y: ty, r: P.target === 'settlement' ? s.radius : P.radius || 1.5, color: P.color, nationId: me.id, pid: target?.look ? target.id : undefined });
   return { ok: true };
+}
+
+
+// ---------------------------------------------------------------------------------------------
+// Transient pawn buffs. A buff is `p.buff.<name>Until` (world time) plus a fx delta table; computeFx() is re-run with the
+// active deltas layered on top, so existing systems (move speed, damage, injure, learning) pick them up with no changes.
+const BUFFS = {
+  haste: { speed: 0.35 }, ward: { dmgTaken: -0.35 }, fervor: { melee: 0.3, ranged: 0.2 },
+  scholar: { learn: 0.6 }, dread: { melee: -0.25, ranged: -0.25, speed: -0.1 },
+};
+export function refreshBuffs(world, p) {
+  computeFx(p);
+  let any = false;
+  for (const [id, delta] of Object.entries(BUFFS)) {
+    const until = p.buff[id + 'Until'];
+    if (!until) continue;
+    if (until <= world.time) { delete p.buff[id + 'Until']; continue; }
+    any = true;
+    for (const [k, v] of Object.entries(delta)) p.fx[k] = (p.fx[k] || 0) + v;
+  }
+  p.buff.fxOn = any;
+}
+function grantBuff(world, p, id, days) { p.buff[id + 'Until'] = world.time + days; p.buff.fxOn = true; refreshBuffs(world, p); }
+
+// Animals summoned by creature powers: id -> [kind, min, max]. They belong to the caster's nation (`patron`):
+// predators spare its people and they may roam its land.
+const SPAWNS = {
+  dog: ['dog', 1, 2], cat: ['cat', 1, 2], birds: ['bird', 3, 5], sheepflock: ['sheep', 3, 5], deerherd: ['deer', 3, 5], horses: ['horse', 2, 4],
+  cows: ['cow', 2, 3], pigs: ['pig', 2, 4], goats: ['goat', 2, 4], chickens: ['chicken', 4, 7], rabbits: ['rabbit', 3, 6], ducks: ['duck', 3, 6], fox: ['fox', 1, 2], wolfpack: ['wolf', 2, 3], bear: ['bear', 1, 1], wisp: ['wisp', 1, 2],
+  slime_green: ['slime_green', 2, 4], slime_blue: ['slime_blue', 2, 4], slime_red: ['slime_red', 1, 3],
+};
+
+/** Effects of every non-original power. Returns an error string (nothing is spent) or null on success. */
+function miracle({ world, pid, me, rng, P, tx, ty, target, s, now, cmd }) {
+  const { W, H, tiles: t } = world, id = P.id, R = P.radius || 0;
+  const permCache = new Map();
+  const may = (o) => { let v = permCache.get(o); if (v === undefined) permCache.set(o, (v = allowed(world, pid, o, 'miracles'))); return v; };
+  /** Visit land tiles within r that are ours, permitted or wild (per tile, not just the brush corners). */
+  const each = (r, fn) => {
+    let k = 0;
+    for (let oy = -r; oy <= r; oy++) for (let ox = -r; ox <= r; ox++) {
+      const d2 = ox * ox + oy * oy; if (d2 > r * r + 0.5) continue;
+      const y = ty + oy; if (y < 1 || y >= H - 1) continue;
+      const i = y * W + wrap(tx + ox, W);
+      if (may(t.owner[i]) && fn(i, wrap(tx + ox, W), y, d2) !== false) k++;
+    }
+    return k;
+  };
+  const dry = (i) => !BIOMES[t.biome[i]].water && t.bld[i] < 0 && t.water[i] < 0.3;
+  const open = (i) => dry(i) && (t.feat[i] === F.NONE || t.feat[i] === F.STUMP);
+  const touch = (i) => world.dirty.add(i);
+  const folk = (r) => Object.values(world.pawns).filter((p) => !p.dead && dist(p.x, p.y, tx, ty, W) <= r);
+  const friends = (r) => folk(r).filter((p) => may(p.nationId)); // own people, permitted nations, wild folk
+  /** Enemy raiders, or nations at war with us whose owner permits it. */
+  const foes = (r) => folk(r).filter((p) => { const n = world.nations[p.nationId]; return n && n.id !== me.id && (n.raider || (rel(me, n.id).state === 'war' && may(n.id))); });
+  /** Anyone a curse may touch: own people, permitted nations, or raiders. */
+  const cursable = (r) => folk(r).filter((p) => may(p.nationId) || world.nations[p.nationId]?.raider);
+  const beasts = (r) => Object.values(world.animals).filter((a) => !a.dead && a.patron !== me.id && dist(a.x, a.y, tx, ty, W) <= r);
+  const cells = (fn, ring = 1) => { const a = world.atmo, c = cellAt(a, tx, ty), gx = c % a.GW, gy = Math.floor(c / a.GW); for (let oy = -ring; oy <= ring; oy++) for (let ox = -ring; ox <= ring; ox++) { const y = clamp(gy + oy, 0, a.GH - 1); fn(y * a.GW + wrap(gx + ox, a.GW), a); } };
+  const douse = (r, to = 20) => { for (const i of [...world.fireActive]) if (dist(i % W, Math.floor(i / W), tx, ty, W) < r) t.fire[i] = Math.min(t.fire[i], to); };
+  const pawns = (s && s._pawns) || (s ? Object.values(world.pawns).filter((p) => !p.dead && p.settlementId === s.id) : []);
+
+  // creature summons share one path
+  if (SPAWNS[id]) {
+    const [kind, lo, hi] = SPAWNS[id], A = ANIMALS[kind], n = rng.int(lo, hi);
+    const spots = [];
+    each(R, (i) => { if (tileCost(t, i) > 0 && t.bld[i] < 0 && t.water[i] < 0.4) { spots.push(i); } return false; });
+    if (!spots.length) return 'There is no room for creatures there.';
+    for (let k = 0; k < n; k++) {
+      const i = rng.pick(spots), aid = world.nextId.animal++;
+      world.animals[aid] = { id: aid, kind, x: (i % W) + rng.range(0.2, 0.8), y: Math.floor(i / W) + rng.range(0.2, 0.8), hp: A.hp, dead: false, facing: rng.chance(0.5) ? 1 : -1, vx: 0, vy: 0, t: rng.next() * 3, patron: me.id };
+    }
+    if (kind === 'bird') for (const p of friends(8)) p.needs.joy = Math.min(1, p.needs.joy + 0.25);
+    return null;
+  }
+
+  switch (id) {
+    // ---- nature ----
+    case 'sprout': {
+      const k = each(R, (i) => { const b = BIOMES[t.biome[i]]; if (!open(i) || !(b.fert > 0.15) || !rng.chance(0.5)) return false; t.feat[i] = F.TREE; t.featHp[i] = 3; touch(i); });
+      return k ? null : 'No open ground for trees to sprout.';
+    }
+    case 'bloom': {
+      each(R, (i) => { if (!open(i) || !(BIOMES[t.biome[i]].fert > 0.1) || !rng.chance(0.25)) return false; t.feat[i] = F.BERRY; t.featHp[i] = 4; touch(i); });
+      for (const p of friends(R + 3)) p.needs.joy = Math.min(1, p.needs.joy + 0.35);
+      break;
+    }
+    case 'snowfall': cells((c, a) => { a.Hm[c] *= 2.5; a.anomaly[c] -= 9; }); douse(R); break;
+    case 'sunbeam': cells((c, a) => { a.Hm[c] *= 0.4; a.cloud[c] = 0; a.anomaly[c] += 3; }); break;
+    case 'frostnip': cells((c, a) => { a.anomaly[c] -= 8; }, 0); break;
+    case 'thaw': cells((c, a) => { a.anomaly[c] += 8; a.snow[c] *= 0.3; }, 0); break;
+    case 'lightrod': world.atmo.overrides.push({ x: tx, y: ty, r: R, u: 0, v: 0, until: now + 3, rod: true }); break;
+    case 'spring': {
+      const c = ty * W + tx;
+      if (!dry(c) || t.biome[c] === B.MOUNTAIN || t.biome[c] === B.PEAK || !may(t.owner[c])) return 'A spring cannot rise there.';
+      t.biome[c] = B.LAKE; t.feat[c] = F.NONE; t.river[c] = 0; t.water[c] = 1; world.waterActive.add(c); touch(c);
+      each(R, (i, x, y, d2) => { if (d2 === 0 || !open(i) || !(BIOMES[t.biome[i]].fert > 0.1) || !rng.chance(0.35)) return false; t.feat[i] = F.BERRY; t.featHp[i] = 4; touch(i); });
+      break;
+    }
+    case 'uplift': {
+      const lower = !!cmd.lower;
+      const k = each(R, (i, x, y, d2) => {
+        if (t.bld[i] >= 0 || y < 2 || y > H - 3) return false;
+        t.height[i] = clamp(t.height[i] + (lower ? -1 : 1) * 0.07 * (1 - d2 / (R * R + 2)), -1, 1);
+        const T = t.baseTemp[i], h = t.height[i];
+        if (h < -0.02) { t.biome[i] = h < -0.1 ? B.OCEAN : B.SHALLOW; t.feat[i] = F.NONE; t.river[i] = 0; }
+        else if (h > 0.5) t.biome[i] = T < 0 ? B.PEAK : B.MOUNTAIN;
+        else if (h > 0.38) t.biome[i] = B.MOUNTAIN;
+        else if (BIOMES[t.biome[i]].water || t.biome[i] === B.MOUNTAIN) t.biome[i] = T > 18 ? B.SAVANNA : T > 3 ? B.PLAINS : B.TUNDRA;
+        touch(i);
+      });
+      if (!k) return 'Nothing to reshape there.';
+      emitFx(world, { type: 'quake', x: tx, y: ty, mag: 0.25 });
+      break;
+    }
+    case 'fertilesoil': {
+      const k = each(R, (i) => {
+        if (!dry(i) || t.feat[i] === F.FARM) return false;
+        const b = t.biome[i]; let hit = false;
+        if (b === B.DESERT && rng.chance(0.5)) { t.biome[i] = B.SAVANNA; hit = true; }
+        else if ((b === B.SAVANNA || b === B.TUNDRA) && rng.chance(0.35)) { t.biome[i] = B.PLAINS; hit = true; }
+        if (t.feat[i] === F.NONE && BIOMES[t.biome[i]].fert > 0.3 && rng.chance(0.2)) { t.feat[i] = F.BERRY; t.featHp[i] = 4; hit = true; }
+        if (hit) touch(i);
+        return hit;
+      });
+      return k ? null : 'The soil here cannot be improved.';
+    }
+    // ---- life ----
+    case 'blesscrops': {
+      const k = each(R, (i) => {
+        if (t.feat[i] !== F.FARM || t.crop[i] === 0) return false;
+        t.crop[i] = Math.min(255, t.crop[i] + 110); if (t.crop[i] >= 255) t.feat[i] = F.CROP_READY; touch(i);
+      });
+      return k ? null : 'No growing crops there.';
+    }
+    case 'masscalm': for (const p of friends(R)) { p.brk = null; p.mood = Math.max(p.mood, 40); } break;
+    case 'ward': grantBuff(world, target, 'ward', 2); break;
+    case 'haste': grantBuff(world, target, 'haste', 1.5); break;
+    case 'mend': for (const p of friends(R)) { for (const j of p.injuries) { j.sev *= 0.5; j.bleed *= 0.3; j.tq = Math.max(j.tq, 0.5); } p.blood = Math.min(1, p.blood + 0.15); } break;
+    case 'lessons': {
+      const picks = SKILLS.map((k) => k.id); for (let k = 0; k < 3; k++) gainXp(target, picks.splice(rng.int(0, picks.length - 1), 1)[0], 260);
+      grantBuff(world, target, 'scholar', 2);
+      break;
+    }
+    case 'cleanse': target.diseases = target.diseases.filter((d) => DISEASES[d.id].env); break;
+    case 'sanctuary': for (const p of friends(R)) { for (const j of p.injuries) j.sev *= 0.8; p.needs.rest = Math.min(1, p.needs.rest + 0.35); addThought(p, 'tended', now); grantBuff(world, p, 'ward', 0.5); } break;
+    case 'feast': {
+      s.stock.meals += 12 + pawns.length * 1.5; s.stock.food += 10;
+      for (const p of pawns) { addThought(p, 'ateFine', now); p.needs.food = 1; }
+      break;
+    }
+    // ---- creatures (fish are handled by the settlements that eat them) ----
+    case 'fishshoal': {
+      const c = ty * W + tx;
+      if (!BIOMES[t.biome[c]].water) return 'Fish need water.';
+      let best = null, bd = 30;
+      for (const q of Object.values(world.settlements)) { const d = dist(q.x, q.y, tx, ty, W); if (q.nationId === me.id && d < bd) { bd = d; best = q; } }
+      if (!best) return 'None of your settlements is close enough to reach the catch.';
+      best.stock.food += 18 + Math.min(12, (best._pawns || []).length);
+      for (let k = 0; k < 6; k++) emitFx(world, { type: 'steam', x: tx + rng.range(-R, R), y: ty + rng.range(-R, R) });
+      break;
+    }
+    // ---- war ----
+    case 'fervor': for (const p of friends(R)) grantBuff(world, p, 'fervor', 1.5); break;
+    case 'aegis': for (const p of friends(R)) grantBuff(world, p, 'ward', 1.5); break;
+    case 'rally': {
+      for (const p of pawns) if (p.role === 'soldier') {
+        p.brk = null; p.needs.rest = Math.min(1, p.needs.rest + 0.4); p.blood = Math.min(1, p.blood + 0.2);
+        for (const j of p.injuries) j.sev *= 0.7;
+        grantBuff(world, p, 'haste', 1); addThought(p, 'miracle', now);
+      }
+      break;
+    }
+    case 'smite': {
+      const a = beasts(R + 0.2), f = foes(R);
+      if (!a.length && !f.length) return 'No beasts or enemies there to smite.';
+      for (const an of a) an.hp -= 45;
+      for (const p of f) { injure(p, rng, 30, 'burn'); emitFx(world, { type: 'knock', pid: p.id, ix: rng.range(-3, 3), iy: -5 }); }
+      emitFx(world, { type: 'lightning', x: tx, y: ty });
+      break;
+    }
+    case 'firearrows': {
+      const a = beasts(R + 1.5), f = foes(R + 1.5);
+      for (let k = 0; k < 6; k++) {
+        const x = tx + rng.range(-R, R), y = ty + rng.range(-R, R);
+        emitFx(world, { type: 'projectile', x: x - 5, y: y - 8, tx: x, ty: y, era: 2 });
+        emitFx(world, { type: 'hit', x, y: y - 0.4 });
+        for (const an of a) if (dist(an.x, an.y, x, y, W) < 1.2) an.hp -= 14;
+        for (const p of f) if (dist(p.x, p.y, x, y, W) < 1.2) injure(p, rng, 10, 'cut');
+        const i = clamp(Math.floor(y), 1, H - 2) * W + wrap(Math.floor(x), W);
+        if (may(t.owner[i]) && rng.chance(0.25)) ignite(world, i, 70);
+      }
+      break;
+    }
+    case 'dread': {
+      const f = foes(R); if (!f.length) return 'No enemies at war with you are near.';
+      for (const p of f) { grantBuff(world, p, 'dread', 1); addThought(p, 'insulted', now); }
+      break;
+    }
+    // ---- curses (all weak; only wild land, your own, or permitted) ----
+    case 'droughtnudge': cells((c, a) => { a.Hm[c] *= 0.35; a.anomaly[c] += 4; }); break;
+    case 'blightpatch': {
+      const k = each(R, (i) => {
+        const f = t.feat[i];
+        if (f === F.FARM || f === F.CROP_READY) { t.crop[i] = 0; t.feat[i] = F.FARM; }
+        else if (f === F.TREE) t.feat[i] = F.STUMP;
+        else if (f === F.BERRY) t.feat[i] = F.NONE;
+        else return false;
+        touch(i);
+      });
+      return k ? null : 'Nothing there to wither.';
+    }
+    case 'locusts': {
+      const k = each(R, (i) => {
+        if (t.feat[i] === F.FARM || t.feat[i] === F.CROP_READY) { t.crop[i] = Math.floor(t.crop[i] * 0.4); t.feat[i] = F.FARM; }
+        else if (t.feat[i] === F.BERRY && rng.chance(0.5)) t.feat[i] = F.NONE;
+        else return false;
+        touch(i);
+      });
+      return k ? null : 'No crops or berries for the locusts.';
+    }
+    case 'terror': {
+      const v = cursable(R).filter((p) => !p.downed).slice(0, 4);
+      if (!v.length) return 'No one is near enough to terrify.';
+      for (const p of v) { p.brk = { type: 'sadWander', lvl: 'minor', until: now + 0.4 }; addThought(p, 'insulted', now); }
+      break;
+    }
+    case 'plagueseed': {
+      const v = cursable(R).filter((p) => p.diseases.length === 0);
+      if (!v.length) return 'No healthy victims nearby.';
+      for (let k = 0; k < 3 && v.length; k++) addDisease(v.splice(rng.int(0, v.length - 1), 1)[0], 'flu', 0.05);
+      break;
+    }
+    case 'famine': s.stock.food *= 0.8; s.stock.meals *= 0.8; break;
+    // ---- world ----
+    case 'aurora': {
+      for (const p of Object.values(world.pawns)) if (!p.dead && p.nationId === me.id) { addThought(p, 'aurora', now); p.mood = Math.min(100, p.mood + 6); }
+      emitFx(world, { type: 'aurora', x: tx, y: ty });
+      break;
+    }
+    case 'meteorshower': {
+      let hits = 0;
+      for (let k = 0; k < 14 && hits < 3; k++) {
+        const x = wrap(Math.floor(tx + rng.range(-R, R)), W), y = clamp(Math.floor(ty + rng.range(-R, R)), 3, H - 4);
+        // impact point must be wild open ground with no foreign (or any) people nearby
+        let clear = true;
+        for (let oy = -2; oy <= 2 && clear; oy++) for (let ox = -2; ox <= 2; ox++) if (t.owner[(y + oy) * W + wrap(x + ox, W)] !== -1) { clear = false; break; }
+        if (!clear || BIOMES[t.biome[y * W + x]].water) continue;
+        if (Object.values(world.pawns).some((p) => !p.dead && dist(p.x, p.y, x, y, W) < 5 && !may(p.nationId))) continue;
+        meteor(world, x, y, rng, me, 0.5); hits++;
+      }
+      if (!hits) return 'Meteors need open, unowned ground to fall on.';
+      break;
+    }
+    default: return 'Unknown power.';
+  }
+  return null;
 }

@@ -2,7 +2,17 @@
 import { makeCanvas } from './pixel.js';
 import { sunPosition } from '../world/atmosphere.js';
 import { spaceSprite } from './miscart.js';
+import { moonSprite } from './pixelplanet.js';
 
+const PL = {}; const plBase = new URL('../../assets/packs/planets/', import.meta.url).href;
+for (const n of ['Lava', 'Ice', 'Baren', 'Terran', 'Black_hole']) { const im = new Image(); im.src = plBase + n + '.png'; PL[n] = im; }
+/** Distant planets of the solar system (static pixel art, slow drift) behind the globe. */
+export function drawFarPlanets(ctx, W, H, t) {
+  ctx.save(); ctx.imageSmoothingEnabled = false;
+  const L = [['Lava', 0.47, 0.09, 1.6, 0.75], ['Ice', 0.94, 0.9, 1.7, 0.6], ['Baren', 0.64, 0.92, 1.3, 0.7], ['Terran', 0.7, 0.1, 1.2, 0.55], ['Black_hole', 0.97, 0.22, 1.5, 0.45]];
+  for (const [n, fx, fy, sc, a] of L) { const im = PL[n]; if (!im.complete || !im.naturalWidth) continue; const z = Math.max(1, Math.round(sc * Math.min(W, H) / 560)), w = im.naturalWidth * z, x = fx * W + Math.sin(t * 0.02 + fx * 9) * 6, y = fy * H + Math.cos(t * 0.017 + fy * 7) * 5; ctx.globalAlpha = a; ctx.drawImage(im, Math.round(x - w / 2), Math.round(y - w / 2), w, w); }
+  ctx.restore();
+}
 export class Globe {
   constructor() { this.D = 0; this.lat0 = 99; this.canvas = null; this.stars = null; }
   ensure(D, lat0) {
@@ -51,8 +61,11 @@ export class Globe {
       const cz = Math.sin(lat) * ssl + Math.cos(lat) * csl * Math.cos(lon - sun.lon);
       const day = Math.max(0, Math.min(1, cz * 3 + 0.35));
       const limb = 0.55 + 0.45 * this.limb[k];
-      let f = (0.22 + 0.78 * day) * limb;
+      const dth = ((k % D) + ((k / D) | 0)) & 1, dq = Math.round(day * 4 + (dth ? 0.28 : -0.28)) / 4; // PixelPlanets-style banded, dithered terminator
+      let f = (0.22 + 0.78 * Math.max(0, Math.min(1, dq))) * limb;
       r *= f; g *= f; b *= f * (1 + (1 - day) * 0.25);
+      if (b > r * 1.25 && b > g && day > 0.3) { const sp = Math.max(0, cz) ** 14 * this.limb[k] * 90; r += sp; g += sp; b += sp; }
+      { const rim = (1 - this.limb[k]) ** 2.2 * (0.25 + 0.75 * day); r += 90 * rim; g += 160 * rim; b += 255 * rim; }
       if (day < 0.5 && ownerBuf && (ownerBuf[ti] & 0x1)) { const L = (1 - day * 2) * 0.8; r += 255 * L * 0.9; g += 200 * L * 0.8; b += 90 * L * 0.4; }
       buf[k] = (255 << 24) | (Math.min(255, b) << 16) | (Math.min(255, g) << 8) | Math.min(255, r);
     }
@@ -75,9 +88,12 @@ export class Globe {
     // moon
     const ma = (t / 27) * Math.PI * 2, mx = Math.cos(ma) * R * 2.6, my = Math.sin(ma) * R * 0.5, mBehind = Math.sin(ma) < 0;
     if (mBehind === behind) {
-      const mr = Math.max(3, R * 0.27);
-      ctx.fillStyle = '#c9c6bd'; ctx.beginPath(); ctx.arc(cx + mx, cy + my, mr, 0, 7); ctx.fill();
-      ctx.fillStyle = '#a9a69d'; for (const [ox, oy, rr] of [[-0.3, -0.2, 0.25], [0.35, 0.25, 0.18], [0.1, 0.45, 0.12]]) { ctx.beginPath(); ctx.arc(cx + mx + ox * mr, cy + my + oy * mr, rr * mr, 0, 7); ctx.fill(); }
+      const mr = Math.max(4, R * 0.3);
+      const mx0 = cx + mx, my0 = cy + my, msz = mr * 2;
+      ctx.save(); ctx.imageSmoothingEnabled = false;
+      const ha = ctx.createRadialGradient(mx0, my0, mr * 0.9, mx0, my0, mr * 1.25); ha.addColorStop(0, 'rgba(150,170,220,0.18)'); ha.addColorStop(1, 'rgba(150,170,220,0)'); ctx.fillStyle = ha; ctx.beginPath(); ctx.arc(mx0, my0, mr * 1.25, 0, 7); ctx.fill();
+      ctx.drawImage(moonSprite(t), Math.round(mx0 - mr), Math.round(my0 - mr), Math.round(msz), Math.round(msz));
+      ctx.restore();
       const bases = world.space.filter((o) => o.type === 'moonbase').length;
       for (let k = 0; k < bases; k++) { ctx.fillStyle = '#fff2a8'; ctx.fillRect(cx + mx - mr * 0.4 + k * mr * 0.5, cy + my + mr * 0.1, 2, 2); }
     }

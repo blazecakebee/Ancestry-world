@@ -3,7 +3,7 @@
 export const CHANNELS = ['master', 'music', 'ambient', 'ui', 'miracles', 'world'];
 
 class AudioEngine {
-  constructor() { this.ctx = null; this.bus = {}; this.vol = { master: 0.8, music: 0.45, ambient: 0.6, ui: 0.7, miracles: 0.8, world: 0.7 }; this.last = {}; this.musicOn = false; }
+  constructor() { this.ctx = null; this.bus = {}; this.vol = { master: 0.8, music: 0.45, ambient: 0.45, ui: 0.6, miracles: 0.6, world: 0.55 }; this.last = {}; this.musicOn = false; }
   init() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
@@ -67,7 +67,7 @@ class AudioEngine {
       case 'power': {
         const p = opts.power;
         [392, 523, 659, 784, 1046].forEach((f, i) => T({ f, type: 'sine', dur: 0.6, vol: 0.1, delay: i * 0.05, ch: 'miracles', verb: 0.7 }));
-        if (p === 'rain' || p === 'breeze') N({ dur: 1.4, vol: 0.25, ch: 'miracles', filter: 'lowpass', f: 600, f2: 2400, verb: 0.4 });
+        if (p === 'rain' || p === 'breeze') N({ dur: 1.4, vol: 0.07, ch: 'miracles', filter: 'lowpass', f: 500, f2: 1500, verb: 0.3 });
         if (p === 'tectonic') { N({ dur: 1.6, vol: 0.5, ch: 'miracles', filter: 'lowpass', f: 120, f2: 60, q: 0.7 }); T({ f: 55, f2: 30, type: 'sawtooth', dur: 1.4, vol: 0.25, ch: 'miracles' }); }
         if (p === 'heal' || p === 'cure' || p === 'calm') [1046, 1318, 1568].forEach((f, i) => T({ f, type: 'triangle', dur: 0.8, vol: 0.07, delay: 0.2 + i * 0.1, ch: 'miracles', verb: 0.8 }));
         if (p === 'avatar' || p === 'prophecy' || p === 'orbshield') [261, 329, 392, 523].forEach((f) => T({ f, type: 'sawtooth', dur: 1.6, vol: 0.05, attack: 0.3, ch: 'miracles', verb: 0.9 }));
@@ -88,11 +88,11 @@ class AudioEngine {
       case 'built': [392, 494, 587].forEach((f, i) => T({ f, type: 'triangle', dur: 0.2, vol: 0.1, delay: i * 0.07, ch: 'world' })); N({ dur: 0.25, vol: 0.12, f: 900 }); break;
       case 'era': [262, 330, 392, 523, 659, 784, 1046].forEach((f, i) => T({ f, type: i % 2 ? 'triangle' : 'sawtooth', dur: 0.9, vol: 0.06, delay: i * 0.11, ch: 'miracles', verb: 0.8 })); break;
       case 'horn': T({ f: 147, type: 'sawtooth', dur: 1.2, vol: 0.12, attack: 0.15, ch: 'world', verb: 0.6 }); T({ f: 220, type: 'sawtooth', dur: 1.0, vol: 0.08, attack: 0.15, delay: 0.3, ch: 'world', verb: 0.6 }); break;
-      case 'thunder': N({ dur: 2.2, vol: 0.55, ch: 'ambient', filter: 'lowpass', f: 300, f2: 60, q: 0.5, verb: 0.6 }); N({ dur: 0.15, vol: 0.4, ch: 'ambient', filter: 'highpass', f: 1500 }); break;
+      case 'thunder': if (!this.throttle('thunder', 3500)) break; N({ dur: 2.6, vol: 0.2, ch: 'ambient', filter: 'lowpass', f: 220, f2: 50, q: 0.5, verb: 0.5 }); break;
       case 'boom': N({ dur: 1.6, vol: 0.7, ch: 'world', filter: 'lowpass', f: 400, f2: 40, q: 0.4, verb: 0.5 }); T({ f: 60, f2: 25, type: 'sine', dur: 1.2, vol: 0.5, ch: 'world' }); break;
       case 'quake': N({ dur: 2.5, vol: 0.5, ch: 'world', filter: 'lowpass', f: 90, f2: 40, q: 0.4 }); break;
-      case 'fire': if (this.throttle('fire', 300)) for (let i = 0; i < 4; i++) N({ dur: 0.05, vol: 0.06, f: 3000 + Math.random() * 2000, q: 8, delay: Math.random() * 0.3, ch: 'ambient' }); break;
-      case 'splash': N({ dur: 0.3, vol: 0.18, f: 1200, f2: 400, q: 1 }); break;
+      case 'fire': if (this.throttle('fire', 300)) for (let i = 0; i < 4; i++) N({ dur: 0.05, vol: 0.02, f: 2000 + Math.random() * 1200, q: 4, delay: Math.random() * 0.3, ch: 'ambient' }); break;
+      case 'splash': if (!this.throttle('splash', 250)) break; N({ dur: 0.3, vol: 0.05, f: 900, f2: 350, q: 0.7, filter: 'lowpass' }); break;
       case 'launch': N({ dur: 4, vol: 0.5, ch: 'world', filter: 'lowpass', f: 200, f2: 900, q: 0.6, verb: 0.4 }); break;
       case 'step': if (this.throttle('step', 140)) N({ dur: 0.04, vol: 0.05, filter: 'lowpass', f: 700 }); break;
     }
@@ -102,13 +102,13 @@ class AudioEngine {
   startAmbient() {
     const c = this.ctx;
     const loop = (filterType, f, q) => { const s = c.createBufferSource(); s.buffer = this.noise; s.loop = true; const fl = c.createBiquadFilter(); fl.type = filterType; fl.frequency.value = f; fl.Q.value = q; const g = c.createGain(); g.gain.value = 0; s.connect(fl); fl.connect(g); g.connect(this.bus.ambient); s.start(); return { g, fl }; };
-    this.amb = { wind: loop('bandpass', 500, 0.6), rain: loop('highpass', 2500, 0.4), ocean: loop('lowpass', 400, 0.5), crowd: loop('bandpass', 900, 2), space: null };
+    this.amb = { wind: loop('bandpass', 500, 0.6), rain: loop('bandpass', 1900, 0.35), ocean: loop('lowpass', 400, 0.5), crowd: loop('bandpass', 900, 2), space: null };
     const o = c.createOscillator(), og = c.createGain(); o.type = 'sine'; o.frequency.value = 55; og.gain.value = 0; o.connect(og); og.connect(this.bus.ambient); o.start(); this.amb.space = { g: og, o };
   }
   setAmbient({ wind = 0, rain = 0, ocean = 0, crowd = 0, space = 0 }) {
     if (!this.amb) return;
     const t = this.ctx.currentTime, set = (k, v) => this.amb[k].g.gain.setTargetAtTime(v, t, 0.6);
-    set('wind', Math.min(0.35, wind)); set('rain', Math.min(0.25, rain)); set('ocean', Math.min(0.25, ocean)); set('crowd', Math.min(0.08, crowd)); set('space', Math.min(0.08, space));
+    set('wind', Math.min(0.07, wind * 0.2)); set('rain', Math.min(0.045, rain * 0.16)); set('ocean', Math.min(0.04, ocean * 0.2)); set('crowd', Math.min(0.02, crowd * 0.3)); set('space', Math.min(0.025, space * 0.4));
     this.amb.wind.fl.frequency.setTargetAtTime(300 + wind * 1400, t, 1);
   }
 

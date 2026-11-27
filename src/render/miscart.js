@@ -43,37 +43,96 @@ export function animalSprite(kind, frame, dead = false) {
 }
 
 // ---------- flags ----------
-export const FLAG_PATTERNS = ['solid', 'bicolorH', 'bicolorV', 'tricolorV', 'tricolorH', 'cross', 'nordic', 'saltire', 'canton', 'chevron', 'diagonal', 'border', 'quartered'];
-export const FLAG_EMBLEMS = ['none', 'sun', 'moon', 'star', 'tree', 'mountain', 'eye', 'wave', 'crown', 'sword', 'wheat', 'glitter', 'skull', 'heart'];
-const EMB = { sun: 'sun', moon: 'moon', star: 'star', tree: 'tree', mountain: 'mountain', eye: 'eye', wave: 'wave', crown: 'crown', sword: 'sword', wheat: 'wheat', glitter: 'glitter', skull: 'skull', heart: 'heart' };
-/** Draw a flag at pixel size W x H (24x16 native). wave: 0..1 animation phase (0 = flat). */
+export const FLAG_PATTERNS = ['solid', 'bicolorH', 'bicolorV', 'tricolorV', 'tricolorH', 'cross', 'nordic', 'saltire', 'canton', 'chevron', 'diagonal', 'border', 'quartered',
+  'stripes', 'stripesV', 'fess', 'pale', 'bend', 'pall', 'hoistTri', 'checker', 'diamond', 'disc', 'sunburst', 'bars', 'cantonCross', 'wedge', 'doubleBorder', 'halfDisc', 'gyron', 'triband2', 'frame'];
+// geometric emblems are drawn from maths (sharp at any size); the rest reuse the hand-made 12x12 icon maps
+const GEO = {
+  circle: (x, y) => x * x + y * y < 0.8,
+  ring: (x, y) => { const d = x * x + y * y; return d < 0.9 && d > 0.4; },
+  crescent: (x, y) => x * x + y * y < 0.9 && (x - 0.38) * (x - 0.38) + y * y > 0.55,
+  star5: (x, y) => { const r = Math.hypot(x, y), a = Math.atan2(x, -y); return r < 0.34 + 0.66 * Math.pow(Math.abs(Math.cos(2.5 * a)), 2.2); },
+  star8: (x, y) => { const r = Math.hypot(x, y), a = Math.atan2(y, x); return r < 0.3 + 0.7 * Math.pow(Math.abs(Math.cos(4 * a)), 3); },
+  diamondE: (x, y) => Math.abs(x) + Math.abs(y) < 0.95,
+  plus: (x, y) => (Math.abs(x) < 0.26 && Math.abs(y) < 0.95) || (Math.abs(y) < 0.26 && Math.abs(x) < 0.95),
+  triangle: (x, y) => y > -0.8 && y < 0.8 && Math.abs(x) < (y + 0.8) * 0.6,
+  hexagon: (x, y) => Math.abs(y) < 0.85 && Math.abs(x) * 0.866 + Math.abs(y) * 0.5 < 0.85,
+  sunrays: (x, y) => { const r = Math.hypot(x, y), a = Math.atan2(y, x); return r < 0.42 || (r < 0.98 && r > 0.55 && Math.cos(a * 8) > 0.35); },
+  chevrons: (x, y) => { const t = Math.abs(x) * 0.9 + 0.5 - y; return Math.abs(((t * 3 % 2) + 2) % 2 - 1) < 0.35 && Math.abs(x) < 0.95 && y > -0.75 && y < 0.8; },
+  bolt: (x, y) => { const u = x + 0.1, v = y; return (v > -0.95 && v < 0.05 && Math.abs(u + v * 0.35 + 0.1) < 0.28) || (v >= 0 && v < 0.95 && Math.abs(u + v * 0.35 - 0.25) < 0.28); },
+  arrow: (x, y) => (Math.abs(x) < 0.17 && y > -0.2 && y < 0.95) || (y <= -0.2 && y > -0.95 && Math.abs(x) < (y + 0.95) * 0.9),
+  ankh: (x, y) => (Math.abs(x) < 0.15 && y > -0.1 && y < 0.95) || (Math.abs(y - 0.25) < 0.15 && Math.abs(x) < 0.6) || (() => { const d = Math.hypot(x, (y + 0.45) * 1.15); return d < 0.52 && d > 0.28; })(),
+  anchor: (x, y) => (Math.abs(x) < 0.12 && y > -0.7 && y < 0.8) || (Math.abs(y + 0.35) < 0.12 && Math.abs(x) < 0.4) || (Math.hypot(x, y + 0.75) < 0.2 && Math.hypot(x, y + 0.75) > 0.07) || (y > 0.3 && y < 0.85 && Math.abs(Math.hypot(x, y - 0.15) - 0.7) < 0.14),
+  fleur: (x, y) => (Math.abs(x) < 0.13 && y > -0.9 && y < 0.8) || (Math.hypot(x * 0.8 - 0.42, y - 0.05) < 0.34 && x > 0.12) || (Math.hypot(x * 0.8 + 0.42, y - 0.05) < 0.34 && x < -0.12) || (y > 0.45 && y < 0.7 && Math.abs(x) < 0.55) || (y < -0.2 && Math.abs(x) < (y + 0.9) * 0.45),
+  paw: (x, y) => Math.hypot(x, y - 0.35) < 0.5 || [[-0.6, -0.2], [-0.22, -0.55], [0.22, -0.55], [0.6, -0.2]].some(([a, b]) => Math.hypot(x - a, y - b) < 0.24),
+  tower: (x, y) => (Math.abs(x) < 0.45 && y > -0.35 && y < 0.95) || (y <= -0.35 && y > -0.85 && Math.abs(x) < 0.6 && (Math.floor((x + 0.6) / 0.24) % 2 === 0)),
+};
+const GEO_NAMES = Object.keys(GEO);
+const ICON_EMBLEMS = ['sun', 'moon', 'star', 'tree', 'mountain', 'eye', 'wave', 'crown', 'sword', 'wheat', 'glitter', 'skull', 'heart', 'dove', 'gem', 'shield', 'flask', 'hammer', 'temple', 'house', 'fire', 'storm', 'rain', 'wind', 'ring', 'trophy', 'rocket', 'bulb', 'book', 'scroll', 'sickle', 'cradle', 'hand'];
+export const FLAG_EMBLEMS = ['none', ...ICON_EMBLEMS, ...GEO_NAMES];
+export const FLAG_EMBLEM_POS = [['c', 'Centre'], ['h', 'Hoist'], ['t', 'Canton'], ['f', 'Fly']];
+export const FLAG_EMBLEM_SIZE = [[0.6, 'Small'], [0.85, 'Medium'], [1.1, 'Large']];
+const PAT = {
+  bicolorH: (u, v) => v < 0.5 ? 0 : 1, bicolorV: (u, v) => u < 0.5 ? 0 : 1,
+  tricolorV: (u) => (u < 1 / 3 ? 0 : u < 2 / 3 ? 1 : 2), tricolorH: (u, v) => (v < 1 / 3 ? 0 : v < 2 / 3 ? 1 : 2),
+  cross: (u, v) => Math.abs(u - 0.5) < 0.09 || Math.abs(v - 0.5) < 0.12 ? 1 : 0,
+  nordic: (u, v) => Math.abs(u - 0.36) < 0.08 || Math.abs(v - 0.5) < 0.12 ? 1 : 0,
+  saltire: (u, v) => Math.abs(u - v) < 0.12 || Math.abs(u - (1 - v)) < 0.12 ? 1 : 0,
+  canton: (u, v) => u < 0.45 && v < 0.5 ? 1 : 0,
+  chevron: (u, v) => u < 0.4 * (1 - Math.abs(v - 0.5) * 2) ? 1 : 0,
+  diagonal: (u, v) => u + v < 1 ? 0 : 1,
+  border: (u, v) => u < 0.1 || u > 0.9 || v < 0.14 || v > 0.86 ? 1 : 0,
+  quartered: (u, v) => (u < 0.5) !== (v < 0.5) ? 1 : 0,
+  stripes: (u, v) => Math.floor(v * 7) % 2 ? 1 : 0,
+  stripesV: (u) => Math.floor(u * 7) % 2 ? 1 : 0,
+  fess: (u, v) => Math.abs(v - 0.5) < 0.17 ? 1 : 0,
+  pale: (u) => Math.abs(u - 0.5) < 0.17 ? 1 : 0,
+  bend: (u, v) => Math.abs(u - v) < 0.14 ? 1 : 0,
+  pall: (u, v) => (v > 0.5 && Math.abs(u - 0.5) < 0.1) || (v <= 0.5 && (Math.abs(u - 0.5 - (0.5 - v)) < 0.1 || Math.abs(u - 0.5 + (0.5 - v)) < 0.1)) ? 1 : 0,
+  hoistTri: (u, v) => u < 0.5 * (1 - Math.abs(v - 0.5) * 2) * 1.6 ? 1 : 0,
+  checker: (u, v) => (Math.floor(u * 6) + Math.floor(v * 4)) % 2 ? 1 : 0,
+  diamond: (u, v) => Math.abs(u - 0.5) * 1.1 + Math.abs(v - 0.5) * 1.55 < 0.62 ? 1 : 0,
+  disc: (u, v) => Math.hypot((u - 0.5) * 1.5, v - 0.5) < 0.34 ? 1 : 0,
+  halfDisc: (u, v) => Math.hypot((u - 0.5) * 1.5, v - 1) < 0.62 ? 1 : 0,
+  sunburst: (u, v) => Math.floor((Math.atan2(v - 0.5, (u - 0.5) * 1.5) + Math.PI) / (Math.PI * 2) * 16) % 2 ? 1 : 0,
+  bars: (u, v) => Math.floor((u + v) * 7) % 2 ? 1 : 0,
+  cantonCross: (u, v) => (u < 0.5 && v < 0.55) ? ((Math.abs(u - 0.25) < 0.05 || Math.abs(v - 0.275) < 0.07) ? 0 : 1) : 0,
+  wedge: (u, v) => v > 0.5 ? (u < 1 - (v - 0.5) * 2 ? 1 : 0) : (u < 1 - (0.5 - v) * 2 ? 1 : 0),
+  doubleBorder: (u, v) => { const e = Math.min(u * 0.66, (1 - u) * 0.66, v, 1 - v); return e < 0.07 || (e > 0.12 && e < 0.17) ? 1 : 0; },
+  gyron: (u, v) => u < 0.5 && v > 0.5 && (u + (1 - v)) < 0.5 ? 1 : 0,
+  triband2: (u, v) => v < 0.25 || v > 0.75 ? 1 : 0,
+  frame: (u, v) => Math.min(u * 0.66, (1 - u) * 0.66, v, 1 - v) < 0.2 ? 1 : 0,
+};
+const needsC3 = (p) => p === 'tricolorV' || p === 'tricolorH';
+/** Draw a flag at pixel size W x H (24x16 native). wave: 0..1 animation phase (0 = flat).
+ *  flag: pattern, c1, c2, c3, emblem, ec; optional ep (position), es (size), eo (outline), em (mirror pattern) */
 export function flagCanvas(flag, W = 24, H = 16, wave = 0) {
   if (!flag) flag = { pattern: 'solid', c1: '#888888', c2: '#444444', c3: '#ffffff', emblem: 'none', ec: '#ffffff' };
   const key = `fl${JSON.stringify(flag)}|${W}|${H}|${Math.round(wave * 4)}`;
   return memo(key, () => {
-    const b = new PixBuf(W, H), c1 = hexC(flag.c1), c2 = hexC(flag.c2), c3 = hexC(flag.c3);
+    const b = new PixBuf(W, H), cols = [hexC(flag.c1), hexC(flag.c2), hexC(flag.c3)], pf = PAT[flag.pattern];
+    const flip = flag.em ? 1 : 0;
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      const u = x / W, v = y / H; let c = c1;
-      switch (flag.pattern) {
-        case 'bicolorH': c = v < 0.5 ? c1 : c2; break;
-        case 'bicolorV': c = u < 0.5 ? c1 : c2; break;
-        case 'tricolorV': c = u < 1 / 3 ? c1 : u < 2 / 3 ? c2 : c3; break;
-        case 'tricolorH': c = v < 1 / 3 ? c1 : v < 2 / 3 ? c2 : c3; break;
-        case 'cross': c = Math.abs(u - 0.5) < 0.09 || Math.abs(v - 0.5) < 0.12 ? c2 : c1; break;
-        case 'nordic': c = Math.abs(u - 0.36) < 0.08 || Math.abs(v - 0.5) < 0.12 ? c2 : c1; break;
-        case 'saltire': c = Math.abs(u - v) < 0.12 || Math.abs(u - (1 - v)) < 0.12 ? c2 : c1; break;
-        case 'canton': c = u < 0.45 && v < 0.5 ? c2 : c1; break;
-        case 'chevron': c = u < 0.4 * (1 - Math.abs(v - 0.5) * 2) ? c2 : c1; break;
-        case 'diagonal': c = u + v < 1 ? c1 : c2; break;
-        case 'border': c = u < 0.1 || u > 0.9 || v < 0.14 || v > 0.86 ? c2 : c1; break;
-        case 'quartered': c = (u < 0.5) !== (v < 0.5) ? c2 : c1; break;
-      }
-      b.set(x, y, c);
+      let u = (x + 0.5) / W; const v = (y + 0.5) / H; if (flip) u = 1 - u;
+      b.set(x, y, pf ? cols[pf(u, v)] || cols[0] : cols[0]);
     }
-    if (flag.emblem && flag.emblem !== 'none' && ICONS[EMB[flag.emblem]]) {
-      const ic = ICONS[EMB[flag.emblem]], ec = hexC(flag.ec || '#ffffff');
-      const s = Math.max(1, Math.floor(H / 14)), ox = Math.floor(W / 2 - 6 * s), oy = Math.floor(H / 2 - 6 * s);
-      for (let y = 0; y < 12; y++) for (let x = 0; x < 12; x++) { const ch = ic[y][x]; if (ch !== '.' && ch !== 'k') b.rect(ox + x * s, oy + y * s, s, s, ec); }
+    const em = flag.emblem;
+    if (em && em !== 'none') {
+      const geo = GEO[em], ic = !geo && ICONS[em];
+      if (geo || ic) {
+        const ec = hexC(flag.ec || '#ffffff'), sz = Math.max(0.4, Math.min(1.3, +flag.es || 0.85));
+        const pos = flag.ep || 'c', k = pos === 't' ? 0.55 : 1;
+        const half = H * 0.5 * sz * k, cx = pos === 'h' ? W * 0.27 : pos === 't' ? W * 0.24 : pos === 'f' ? W * 0.73 : W / 2, cy = pos === 't' ? H * 0.27 : H / 2;
+        const mask = new Uint8Array(W * H);
+        const x0 = Math.max(0, Math.floor(cx - half)), x1 = Math.min(W - 1, Math.ceil(cx + half)), y0 = Math.max(0, Math.floor(cy - half)), y1 = Math.min(H - 1, Math.ceil(cy + half));
+        for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+          const px = (x + 0.5 - cx) / half, py = (y + 0.5 - cy) / half; let on = false;
+          if (geo) on = geo(px, py);
+          else { const ix = Math.floor((px + 1) * 6), iy = Math.floor((py + 1) * 6); if (ix >= 0 && ix < 12 && iy >= 0 && iy < 12) { const ch = ic[iy][ix]; on = ch !== '.' && ch !== 'k'; } }
+          if (on) mask[y * W + x] = 1;
+        }
+        if (flag.eo) { const dk = rgba(18, 18, 28); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (!mask[y * W + x] && ((x > 0 && mask[y * W + x - 1]) || (x < W - 1 && mask[y * W + x + 1]) || (y > 0 && mask[(y - 1) * W + x]) || (y < H - 1 && mask[(y + 1) * W + x]))) b.set(x, y, dk); }
+        for (let i = 0; i < W * H; i++) if (mask[i]) b.set(i % W, (i / W) | 0, ec);
+      }
     }
     if (wave) { // simple cloth wave: shade columns
       for (let x = 0; x < W; x++) { const f = 1 + Math.sin(x / W * Math.PI * 2 + wave * Math.PI * 2) * 0.12; for (let y = 0; y < H; y++) { const c = b.d[y * W + x]; if (c) b.d[y * W + x] = shadeC(c, f); } }
@@ -81,6 +140,7 @@ export function flagCanvas(flag, W = 24, H = 16, wave = 0) {
     return b.toCanvas();
   });
 }
+export { needsC3 };
 
 // ---------- UI icons ----------
 export function iconCanvas(name, scale = 2) {
@@ -92,12 +152,35 @@ export function iconCanvas(name, scale = 2) {
   });
 }
 const urlCache = new Map();
+const VA_BASE = typeof document !== 'undefined' ? new URL('../../assets/packs/verarc/', import.meta.url).href : '';
+const RV_BASE = typeof document !== 'undefined' ? new URL('../../assets/packs/raven/', import.meta.url).href : '';
+// Every interface icon name maps onto the newer Raven (rv:) art; unmapped names (pause/play/close/arrows…) stay as crisp hand-made glyphs.
+export const UI_REMAP = {
+  glitter: 'rv:173', star: 'rv:670', bulb: 'rv:296', rain: 'rv:653', heart: 'rv:659', dove: 'rv:233', wind: 'rv:654', eye: 'rv:335', wheat: 'rv:460', scroll: 'rv:8',
+  gem: 'rv:161', flask: 'rv:123', sword: 'rv:155', cradle: 'rv:668', mountain: 'rv:17', crown: 'rv:23', shield: 'rv:598',
+  food: 'rv:441', meals: 'rv:527', rations: 'rv:513', wood: 'rv:109', stone: 'rv:316', metal: 'rv:221', cloth: 'rv:204', medicine: 'rv:271',
+  pop: 'rv:652', research: 'rv:292', gear: 'rv:2', map: 'rv:305', book: 'rv:101', flag: 'rv:41', chat: 'rv:7', users: 'rv:636', pin: 'rv:394', skull: 'rv:673',
+  baby: 'rv:522', fire: 'rv:81', storm: 'rv:669', angry: 'rv:640', love: 'rv:661', ring: 'rv:116', shirt: 'rv:203', hammer: 'rv:126', hand: 'rv:663', house: 'rv:16',
+  temple: 'rv:36', sun: 'rv:386', moon: 'rv:384', tree: 'rv:32', wave: 'rv:356', sickle: 'rv:337', trophy: 'rv:15', globe: 'rv:216', rocket: 'rv:12', satellite: 'rv:210',
+  lock: 'rv:178', unlock: 'rv:179', warning: 'rv:631', info: 'rv:13', save: 'rv:10', load: 'rv:11', settings: 'rv:2', possess: 'rv:5', plan: 'rv:125', inspect: 'rv:662',
+};
+const isVA = (n) => typeof n === 'string' && (n.startsWith('va:') || n.startsWith('rv:'));
+const vaURL = (n) => (n.startsWith('rv:') ? RV_BASE + n.slice(3) : VA_BASE + n.slice(3).replace(/[()]/g, '')) + '.png';
 export function iconURL(name, scale = 2) {
+  if (UI_REMAP[name]) name = UI_REMAP[name];
+  if (isVA(name)) return vaURL(name);
   const k = name + scale; if (urlCache.has(k)) return urlCache.get(k);
   const u = iconCanvas(name, scale).toDataURL(); urlCache.set(k, u); return u;
 }
-export const iconHTML = (name, scale = 2, cls = 'px-icon') => `<img class="${cls}" src="${iconURL(name, scale)}" alt="" draggable="false">`;
-export function iconImg(name, scale = 2, cls = 'px-icon') { const i = document.createElement('img'); i.className = cls; i.src = iconURL(name, scale); i.alt = ''; i.draggable = false; return i; }
+// remapped UI icons are 32px art shown in the same footprint the old 12px glyphs used (sm = 18px, normal = 24px, big scales grow)
+const remapPx = (scale, cls) => (/\bsm\b/.test(cls) ? 18 : 12 * scale);
+const vaStyle = (name, scale, cls) => (UI_REMAP[name] ? `width:${remapPx(scale, cls)}px;height:${remapPx(scale, cls)}px;image-rendering:auto` : `width:${16 * scale}px;height:${16 * scale}px;image-rendering:pixelated`);
+export const iconHTML = (name, scale = 2, cls = 'px-icon') => `<img class="${cls}" src="${iconURL(name, scale)}" alt="" draggable="false"${isVA(UI_REMAP[name] || name) ? ` style="${vaStyle(name, scale, cls)}"` : ''}>`;
+export function iconImg(name, scale = 2, cls = 'px-icon') {
+  const i = document.createElement('img'); i.className = cls; i.src = iconURL(name, scale);
+  if (isVA(UI_REMAP[name] || name)) { const px = UI_REMAP[name] ? remapPx(scale, cls) : 16 * scale; i.style.width = i.style.height = px + 'px'; i.style.imageRendering = UI_REMAP[name] ? 'auto' : 'pixelated'; }
+  i.alt = ''; i.draggable = false; return i;
+}
 
 // ---------- space ----------
 export function spaceSprite(type) {

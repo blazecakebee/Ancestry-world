@@ -1,10 +1,17 @@
 // Particles & one-shot effects in world space (tile units). Rendered by the surface renderer.
 import { iconCanvas } from './miscart.js';
+import { spx } from './gandalf.js';
+import { powerById } from '../data/powers.js';
+
+/** Super Pixel Effects animation for a power: by id first, then by category. */
+const SPX_BY_ID = { heal: 'spell_heal_001', cure: 'spell_heal_001', revive: 'spell_heal_001', inspire: 'round_sparkle_burst_001', harvest: 'round_sparkle_burst_002', tectonic: 'epic_explosion_001', lightning: 'lightning_strike_001', smite: 'lightning_burst_001', fireball: 'stylized_explosion_001', meteor: 'epic_explosion_002', plague: 'spell_poison_001', blight: 'status_poison_001' };
+const SPX_BY_CAT = { nature: 'round_sparkle_burst_003', life: 'round_heart_burst_001', creatures: 'round_light_burst_001', war: 'symmetrical_impact_001', curses: 'spell_death_001', world: 'scifi_spark_burst_001', divine: 'round_light_burst_001' };
+export const spxForPower = (id) => { const P = powerById[id]; return SPX_BY_ID[id] || SPX_BY_CAT[P?.cat] || 'round_light_burst_001'; };
 
 const POWER_COL = { inspire: '#ffe066', rain: '#7fc8ff', heal: '#ff7fa8', calm: '#b8f5ff', breeze: '#d8f5ff', omen: '#e0c0ff', harvest: '#ffd34d', revelation: '#c58cff', ore: '#ffe9a0', cure: '#9fffcf', valor: '#ff9a6a', fertility: '#ffb0d0', tectonic: '#c8a070', avatar: '#fff6b0', orbshield: '#7fe8ff', prophecy: '#ffe066' };
 
 export class FX {
-  constructor() { this.parts = []; this.rings = []; this.bolts = []; this.emotes = []; this.meteors = []; this.projectiles = []; this.texts = []; this.shake = 0; this.flash = 0; this.max = 2500; }
+  constructor() { this.parts = []; this.rings = []; this.bolts = []; this.emotes = []; this.meteors = []; this.projectiles = []; this.anims = []; this.texts = []; this.shake = 0; this.flash = 0; this.max = 2500; }
   add(p) { if (this.parts.length < this.max) this.parts.push(p); }
   burst(x, y, n, opts) {
     for (let i = 0; i < n; i++) {
@@ -21,18 +28,19 @@ export class FX {
       case 'glitter': this.burst(e.x, e.y, 3 + (e.amount || 1), { col: ['#ffd34d', '#fff6b0', '#ffffff'], speed: 0.6, up: 1.6, grav: -0.8, life: 1.4, kind: 'spark' }); break;
       case 'steam': this.burst(e.x, e.y, 4, { col: '#e8eef4', speed: 0.5, up: 1.5, grav: -1, life: 1.2, size: 2, kind: 'puff' }); break;
       case 'built': this.burst(e.x, e.y, 18, { col: ['#e8d8b0', '#ffffff', '#ffd34d'], speed: 3, up: 3, life: 0.8, kind: 'puff' }); break;
-      case 'lightning': this.bolts.push({ x: e.x + 0.5, y: e.y + 0.5, age: 0, life: 0.35, seed: Math.random() }); this.flash = Math.max(this.flash, 0.6 * shake); this.burst(e.x + 0.5, e.y + 0.5, 10, { col: ['#fff6b0', '#ffffff'], speed: 4, up: 3, life: 0.4, kind: 'spark' }); break;
+      case 'lightning': this.bolts.push({ x: e.x + 0.5, y: e.y + 0.5, age: 0, life: 0.35, seed: Math.random() }); { const now = performance.now(); if (now - (this._lf || 0) > 6000) { this._lf = now; this.flash = Math.max(this.flash, 0.16 * Math.min(1, shake)); } } this.burst(e.x + 0.5, e.y + 0.5, 10, { col: ['#fff6b0', '#ffffff'], speed: 4, up: 3, life: 0.4, kind: 'spark' }); break;
       case 'meteor': this.meteors.push({ x: e.x + 0.5, y: e.y + 0.5, age: 0, life: 1.2, scale: e.scale || 1, shielded: e.shielded }); break;
       case 'quake': this.shake = Math.max(this.shake, (e.mag || 0.6) * 14 * shake); break;
       case 'eruption': this.burst(e.x, e.y, 60, { col: ['#ff6a1a', '#ffb347', '#4a3a36'], speed: 4, up: 8, life: 1.8, size: 2 }); this.shake = Math.max(this.shake, 10 * shake); break;
       case 'projectile': this.projectiles.push({ x: e.x, y: e.y, tx: e.tx, ty: e.ty, age: 0, life: 0.18, era: e.era }); break;
       case 'emote': this.emotes.push({ pid: e.pid, icon: e.icon, age: 0, life: 1.6 }); break;
       case 'power': {
-        const col = POWER_COL[e.power] || '#ffd34d';
+        const col = powerById[e.power]?.color || POWER_COL[e.power] || '#ffd34d', an = spx(spxForPower(e.power));
+        if (an) this.anims.push({ x: e.x, y: e.y, an, age: 0, life: an.frames.length / an.fps, sc: Math.max(1.5, Math.min(5, (e.r || 2) * 0.9)) });
         this.rings.push({ x: e.x, y: e.y, r: e.r || 2, age: 0, life: 1.4, col });
         this.burst(e.x, e.y, 40, { col: [col, '#ffffff', '#ffd34d'], speed: 2.5, up: 4, grav: -0.5, life: 1.8, kind: 'spark' });
         if (e.power === 'tectonic') this.shake = Math.max(this.shake, 8 * shake);
-        this.flash = Math.max(this.flash, 0.15 * shake);
+        this.flash = Math.max(this.flash, 0.05 * Math.min(1, shake));
         break;
       }
       case 'era': this.texts.push({ text: e.label || 'A new era dawns', age: 0, life: 4, nationId: e.nationId, big: true }); break;
@@ -45,7 +53,7 @@ export class FX {
   step(dt) {
     for (const p of this.parts) { p.age += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vz -= p.grav * dt; p.z += p.vz * dt; if (p.z < 0 && p.grav > 0) { p.z = 0; p.vz *= -0.3; p.vx *= 0.6; p.vy *= 0.6; } }
     this.parts = this.parts.filter((p) => p.age < p.life);
-    for (const k of ['rings', 'bolts', 'emotes', 'meteors', 'projectiles', 'texts']) { for (const e of this[k]) e.age += dt; this[k] = this[k].filter((e) => e.age < e.life); }
+    for (const k of ['rings', 'bolts', 'emotes', 'meteors', 'projectiles', 'anims', 'texts']) { for (const e of this[k]) e.age += dt; this[k] = this[k].filter((e) => e.age < e.life); }
     this.shake *= Math.pow(0.02, dt); if (this.shake < 0.2) this.shake = 0;
     this.flash = Math.max(0, this.flash - dt * 1.8);
   }
@@ -61,6 +69,10 @@ export class FX {
       ctx.fillRect(Math.round(sx), Math.round(sy - p.z * T * 0.5), s, s);
     }
     ctx.globalAlpha = 1;
+    for (const a of this.anims) {
+      const [sx, sy] = ws(a.x, a.y), fr = a.an.frames[Math.min(a.an.frames.length - 1, Math.floor(a.age * a.an.fps))], z = a.sc * T / 16;
+      ctx.imageSmoothingEnabled = false; ctx.drawImage(a.an.im, fr[0], fr[1], fr[2], fr[3], Math.round(sx - fr[2] * z / 2), Math.round(sy - fr[3] * z * 0.7), fr[2] * z, fr[3] * z);
+    }
     for (const r of this.rings) {
       const [sx, sy] = ws(r.x, r.y), t = r.age / r.life;
       ctx.strokeStyle = r.col; ctx.globalAlpha = 1 - t; ctx.lineWidth = Math.max(2, T / 8);
@@ -85,7 +97,7 @@ export class FX {
         ctx.strokeStyle = 'rgba(255,170,80,0.7)'; ctx.lineWidth = T * 0.4 * m.scale; ctx.beginPath(); ctx.moveTo(mx + 60, my - 100); ctx.lineTo(mx, my); ctx.stroke();
         ctx.fillStyle = '#ffe9a0'; ctx.beginPath(); ctx.arc(mx, my, T * 0.35 * m.scale, 0, 7); ctx.fill();
         if (m.shielded && k > 0.85) { ctx.strokeStyle = 'rgba(127,232,240,0.8)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(sx, sy, T * 6, Math.PI, 0); ctx.stroke(); }
-      } else if (!m.done) { m.done = true; if (!m.shielded) { this.burst(m.x, m.y, 50, { col: ['#ff6a1a', '#ffd34d', '#4a3a36', '#ffffff'], speed: 5, up: 6, life: 1.4, size: 2 }); this.shake = Math.max(this.shake, 12); this.flash = 0.5; } }
+      } else if (!m.done) { m.done = true; if (!m.shielded) { this.burst(m.x, m.y, 50, { col: ['#ff6a1a', '#ffd34d', '#4a3a36', '#ffffff'], speed: 5, up: 6, life: 1.4, size: 2 }); this.shake = Math.max(this.shake, 12); this.flash = 0.2; } }
     }
     for (const pr of this.projectiles) {
       const t = pr.age / pr.life, [ax, ay] = ws(pr.x, pr.y), [bx, by] = ws(pr.tx, pr.ty);

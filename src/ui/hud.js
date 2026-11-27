@@ -21,10 +21,59 @@ import { audio } from '../audio/audio.js';
 import { showFlagEditor, showCodex, showSettings } from './menu.js';
 import { LW, LH, LPC_BAND } from '../render/lpc.js';
 import { PW, PH, DIR } from '../render/charpack.js';
+import { saveSettings } from './settings.js';
 import { FW, FH } from '../render/pawnart.js';
 
 const RES_ICON = { food: 'food', meals: 'meals', rations: 'rations', wood: 'wood', stone: 'stone', metal: 'metal', cloth: 'cloth', medicine: 'medicine' };
 const OVERLAYS = [['none', 'None', 'globe'], ['borders', 'Borders', 'flag'], ['ideology', 'Ideology', 'scroll'], ['glitter', 'Glitter devotion', 'glitter'], ['trade', 'Trade routes', 'map'], ['race', 'Races', 'users'], ['weather', 'Weather', 'storm'], ['wind', 'Wind', 'wind'], ['temperature', 'Temperature', 'sun'], ['pressure', 'Pressure', 'warning'], ['humidity', 'Humidity', 'rain'], ['pollution', 'Pollution', 'skull']];
+
+const POWER_CATS = [['divine', 'Divine', 'glitter'], ['nature', 'Nature', 'tree'], ['life', 'Life', 'heart'], ['creatures', 'Creatures', 'dove'], ['war', 'War', 'sword'], ['curses', 'Curses', 'skull'], ['world', 'World', 'globe']];
+
+// Which log entries are important enough for a notification card (everything else stays in the Chronicle only).
+// Returns {sev: info|success|warning|danger, icon, title?} or null. `mine` = the event concerns my nation.
+const SEV_ICON = { info: 'info', success: 'check', warning: 'warning', danger: 'skull' };
+const DISASTER_RE = /drought|plague|epidemic|pandemic|famine|eruption|erupted|volcano|meteor|earthquake|quake|flood|tsunami|blizzard|wildfire|locust|blight|famine|cataclysm/i;
+export function classifyEvent(e, ctx) {
+  const t = e.text || '', { mine, myName, pinned } = ctx;
+  const involves = mine || (myName && t.includes(myName));
+  switch (e.cat) {
+    case 'war':
+      if (/raiding|marauders/.test(t)) return involves ? { sev: 'danger', icon: 'sword' } : null;
+      if (/rebelled|independence/.test(t)) return involves || e.big ? { sev: 'danger', icon: 'flag' } : null;
+      if (/declared war|conquered/.test(t)) return involves || e.big ? { sev: 'danger', icon: 'sword' } : null;
+      if (/marches on|has withdrawn|been broken|joined the war/.test(t)) return involves ? { sev: /broken|withdrawn/.test(t) ? 'success' : 'warning', icon: 'sword' } : null;
+      return null;
+    case 'peace':
+      if (/made peace|alliance/.test(t) && (involves || e.big)) return { sev: 'success', icon: 'dove' };
+      if (/sues for peace/.test(t) && involves) return { sev: 'info', icon: 'dove' };
+      return null;
+    case 'nation':
+      if (/collaps|fallen|has (fallen|dissolved|perished|vanished|ended|died out)|extinct/i.test(t) && (e.big || involves)) return { sev: 'danger', icon: 'flag' };
+      if (/founded|to found|settled the wilds|patron deity/.test(t) && (e.big || involves)) return { sev: 'success', icon: 'flag' };
+      if (/proposed/.test(t) && involves) return { sev: 'info', icon: 'users', title: t };
+      if (/reformed/.test(t) && involves) return { sev: 'info', icon: 'scroll' };
+      if (/now leads/.test(t) && involves) return { sev: 'info', icon: 'crown' };
+      if (e.big && involves) return { sev: 'info', icon: 'flag' };
+      return null;
+    case 'era': return involves ? { sev: 'success', icon: 'research', title: t.split('!')[0] + '!' } : null;
+    case 'age': return { sev: 'info', icon: 'globe', title: t.split('.')[0] };
+    case 'disaster':
+      if (e.severity === 'major' || DISASTER_RE.test(t)) return { sev: 'danger', icon: 'storm' };
+      return null;
+    case 'weather': return DISASTER_RE.test(t) ? { sev: 'warning', icon: 'storm' } : null;
+    case 'death':
+      if (pinned.has(e.pid)) return { sev: 'danger', icon: 'skull' };
+      if (e.leader && involves) return { sev: 'danger', icon: 'crown' };
+      return null;
+    case 'space': return involves && e.big ? { sev: 'success', icon: 'rocket' } : null;
+    case 'faith': return /Prophet/.test(t) && involves ? { sev: 'success', icon: 'star' } : null;
+    case 'system': return /granted|revoked/.test(t) && ctx.player && t.endsWith(` ${ctx.player}.`) ? { sev: 'info', icon: 'lock' } : null;
+    case 'request': return { sev: 'info', icon: 'users' };
+    default: return null;
+  }
+}
+
+const CHIP_GROUP = { birth: 'life', death: 'life', social: 'life', break: 'life', war: 'war', peace: 'war', disaster: 'world', weather: 'world', age: 'world', miracle: 'world', good: 'world', bad: 'world', space: 'world', nation: 'nation', era: 'nation', faith: 'nation' };
 
 export class HUD {
   constructor(app) {
@@ -54,75 +103,101 @@ export class HUD {
       h('div', { class: 'glass speed-group' }, this.pauseBtn, ...this.speedBtns),
       h('button', { class: 'glass btn icon', onclick: () => app.openMenu(), tip: 'Menu' }, iconImg('settings')),
     ));
-    // ---- left tools ----
+    // ---- left tools (icon + label, collapsible) ----
     this.toolBtns = {};
-    const tool = (id, icon, tip, fn) => (this.toolBtns[id] = h('button', { class: 'btn', onclick: fn, tip }, iconImg(icon)));
-    this.root.append(h('div', { class: 'glass hud-left' },
-      tool('inspect', 'inspect', 'Inspect <span class="kbd">Q</span><br>Click citizens, buildings & settlements', () => app.setTool('inspect')),
-      tool('build', 'plan', 'Plan a building <span class="kbd">B</span><br>Your people will build it', () => this.openBuildMenu()),
-      tool('possess', 'possess', 'Possess a citizen<br>Select one of your people, then take control (WASD to move, F to act, R to release)', () => app.possessSelected()),
-      tool('overlay', 'map', 'Map overlays <span class="kbd">F1–F10</span>', () => this.toggleOverlayMenu()),
-      h('div', { class: 'sep' }),
-      tool('nation', 'flag', 'Nation <span class="kbd">N</span>', () => this.me && this.openNation(this.me.id)),
-      tool('space', 'rocket', 'Offworld & space', () => this.openSpace()),
-      tool('codex', 'book', 'Codex <span class="kbd">C</span>', () => showCodex()),
-      tool('save', 'save', 'Save world', () => app.save()),
-      tool('help', 'info', 'Tutorial', () => app.tutorial?.start(true)),
-    ));
-    // ---- powers ----
+    const tool = (id, icon, label, kbd, tip, fn) => (this.toolBtns[id] = h('button', { class: 'btn tool', 'data-tool': id, onclick: fn, tip, 'aria-label': label }, iconImg(icon), h('span', { class: 'lbl' }, label), kbd ? h('span', { class: 'kbd' }, kbd) : null));
+    this.chevBtn = h('button', { class: 'tool-chev', onclick: () => this.setToolbarCollapsed(!app.settings.toolbarCollapsed), tip: 'Collapse / expand the toolbar labels' });
+    this.toolbar = h('div', { class: 'glass hud-left' }, this.chevBtn,
+      h('div', { class: 'tool-list' },
+        tool('inspect', 'inspect', 'Inspect', 'Q', 'Inspect <span class="kbd">Q</span><br>Click citizens, buildings & settlements', () => app.setTool('inspect')),
+        tool('build', 'plan', 'Plan', 'B', 'Plan a building <span class="kbd">B</span><br>Your people will build it', () => this.openBuildMenu()),
+        tool('possess', 'possess', 'Possess', 'F', 'Possess a citizen<br>Select one of your people, then take control (WASD to move, F to act, R to release)', () => app.possessSelected()),
+        tool('overlay', 'map', 'Overlays', 'F1', 'Map overlays <span class="kbd">F1–F10</span>', () => this.toggleOverlayMenu()),
+        h('div', { class: 'sep' }),
+        tool('nation', 'flag', 'Nation', 'N', 'Nation <span class="kbd">N</span>', () => this.me && this.openNation(this.me.id)),
+        tool('space', 'rocket', 'Space', '', 'Offworld & space', () => this.openSpace()),
+        tool('codex', 'book', 'Codex', 'C', 'Codex <span class="kbd">C</span>', () => showCodex()),
+        tool('save', 'save', 'Save', '', 'Save world', () => app.save()),
+        tool('help', 'info', 'Tutorial', '', 'Tutorial', () => app.tutorial?.start(true))));
+    this.root.append(this.toolbar);
+    this.setToolbarCollapsed(!!app.settings.toolbarCollapsed, false);
+    // ---- powers dock ----
     this.powerBar = h('div', { class: 'glass powerbar' });
     this.modeChip = h('div', { class: 'glass mode-chip hidden' });
     this.root.append(h('div', { class: 'hud-bottom' }, this.powerBar), this.modeChip);
     this.buildPowers();
-    // ---- right: players + feed ----
+    // ---- right: players + notifications ----
     this.playersEl = h('div', { class: 'glass players' });
-    this.feedList = h('div', { class: 'list' });
-    this.chatIn = h('input', { type: 'text', placeholder: 'Say something to everyone…', maxlength: 200, onkeydown: (e) => { e.stopPropagation(); if (e.key === 'Enter' && e.target.value.trim()) { app.session.command({ type: 'chat', text: e.target.value }); e.target.value = ''; } if (e.key === 'Escape') e.target.blur(); } });
-    this.mineBtn = h('button', { class: 'btn sm ghost', onclick: () => { this.feedMine = !this.feedMine; this.mineBtn.classList.toggle('active', this.feedMine); this.rebuildFeed(); }, tip: 'Only show events about my nation' }, 'Mine');
-    this.root.append(h('div', { class: 'hud-right' },
-      this.playersEl,
-      h('div', { class: 'glass feed' }, h('div', { class: 'head' }, iconImg('scroll', 2, 'px-icon sm'), h('b', {}, 'Chronicle'), h('div', { class: 'grow' }), this.mineBtn, h('button', { class: 'btn sm ghost', onclick: () => showSettings(app, 'gameplay'), tip: 'Feed filters' }, iconImg('settings', 2, 'px-icon sm'))), this.feedList, h('div', { class: 'chatbox' }, this.chatIn)),
-    ));
+    this.notifEl = h('div', { class: 'notifs' });
+    this.root.append(h('div', { class: 'hud-right' }, this.playersEl, this.notifEl));
+    // ---- bottom-left: chronicle ----
+    this.buildChronicle();
     this.rebuildFeed();
   }
 
+  setToolbarCollapsed(v, persist = true) {
+    this.toolbar.classList.toggle('collapsed', v);
+    this.chevBtn.textContent = v ? '›' : '‹';
+    this.chevBtn.setAttribute('aria-label', v ? 'Expand toolbar' : 'Collapse toolbar');
+    document.documentElement.style.setProperty('--toolbar-w', v ? '54px' : '158px');
+    if (persist) { this.app.settings.toolbarCollapsed = v; saveSettings(this.app.settings); }
+  }
+
   buildPowers() {
-    const n = this.me;
+    const n = this.me, app = this.app;
     const tier = n ? tierOf(n) : 1;
     this.powerEls = {};
+    const catOf = (p) => (POWER_CATS.some((c) => c[0] === p.cat) ? p.cat : 'divine');
+    let cat = app.settings.powerCat;
+    if (!POWER_CATS.some((c) => c[0] === cat)) cat = 'divine';
+    const counts = {}; for (const p of POWERS) counts[catOf(p)] = (counts[catOf(p)] || 0) + 1;
+    // hide empty categories (but always keep the selected one valid)
+    const cats = POWER_CATS.filter((c) => counts[c[0]]);
+    if (!cats.some((c) => c[0] === cat)) cat = cats[0]?.[0] || 'divine';
+    const tabsEl = h('div', { class: 'dock-tabs', role: 'tablist' }, cats.map(([id, label, icon]) =>
+      h('button', { class: `dock-tab ${id === cat ? 'on' : ''}`, role: 'tab', onclick: () => { if (app.settings.powerCat === id) return; app.settings.powerCat = id; saveSettings(app.settings); this.buildPowers(); }, tip: `${label} powers (${counts[id]})` }, iconImg(icon, 2, 'px-icon sm'), h('span', {}, label))));
     const kids = [];
+    let lastTier = 0;
     for (const T of TIERS) {
-      if (T.tier > 1) kids.push(h('div', { class: 'tier-sep' }));
-      for (const p of POWERS.filter((x) => x.tier === T.tier)) {
+      const list = POWERS.filter((x) => x.tier === T.tier && catOf(x) === cat);
+      if (!list.length) continue;
+      if (lastTier) kids.push(h('div', { class: 'tier-sep' }));
+      lastTier = T.tier;
+      for (const p of list) {
         const el = h('div', { class: `power ${tier < p.tier ? 'locked' : ''}`, onclick: () => this.app.armPower(p.id), tip: `<b>${p.name}</b> <span class="muted">· Tier ${p.tier}</span><br>${p.desc}<br><span style="color:var(--accent)">✦ ${p.cost} Glitter</span> · ${p.cd} day cooldown${p.minEra ? `<br>Requires ${ERAS[p.minEra].name}` : ''}${tier < p.tier ? `<br><i>Unlocks at ${T.devotion} lifetime devotion</i>` : ''}` },
-          iconImg(p.icon), h('span', { class: 'cost' }, p.cost), h('div', { class: 'cd' }));
+          iconImg(p.icon), h('span', { class: 'cost' }, p.cost), tier < p.tier ? h('span', { class: 'lock' }, '🔒') : null, h('div', { class: 'cd' }));
+        if (p.color) el.style.setProperty('--pc', p.color);
         this.powerEls[p.id] = el; kids.push(el);
       }
     }
-    this.powerBar.replaceChildren(...kids);
+    const row = h('div', { class: 'power-row' }, kids);
+    row.addEventListener('wheel', (e) => { if (e.deltaY && !e.deltaX) { row.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
+    this.powerBar.replaceChildren(tabsEl, row);
     this.tierShown = tier;
   }
+
+  setHTML(el, html) { if (el._h !== html) { el._h = html; el.innerHTML = html; } }
 
   // ---------- periodic refresh ----------
   update() {
     const w = this.w, app = this.app, n = this.me;
     const d = dateString(w.time), cx = app.renderer.cam.x, lt = ((w.time + cx / w.W - 0.5) % 1 + 1) % 1, hr = Math.floor(lt * 24);
-    this.clockEl.innerHTML = `<b>Year ${d.year}</b><span>${d.season} · Day ${d.day} · ${String(hr).padStart(2, '0')}:${String(Math.floor((lt * 24 % 1) * 60 / 15) * 15).padStart(2, '0')} ${hr >= 6 && hr < 19 ? '☀' : '☾'}</span>`;
+    this.setHTML(this.clockEl, `<b>Year ${d.year}</b><span>${d.season} · Day ${d.day} · ${String(hr).padStart(2, '0')}:${String(Math.floor((lt * 24 % 1) * 60 / 15) * 15).padStart(2, '0')} ${hr >= 6 && hr < 19 ? '☀' : '☾'}</span>`);
     const age = WORLD_AGES[w.age?.id]; this.ageEl.textContent = age ? age.name : ''; if (age) { this.ageEl.style.color = age.color; this.ageEl.dataset.tip = age.desc; }
-    this.pauseBtn.replaceChildren(iconImg(w.paused ? 'play' : 'pause', 2, 'px-icon sm')); this.pauseBtn.classList.toggle('active', w.paused);
+    if (this._paused !== w.paused) { this._paused = w.paused; this.pauseBtn.replaceChildren(iconImg(w.paused ? 'play' : 'pause', 2, 'px-icon sm')); } this.pauseBtn.classList.toggle('active', w.paused);
     this.speedBtns.forEach((b, i) => b.classList.toggle('active', !w.paused && Math.abs(w.speed - app.settings.speeds[i]) < 0.01));
     const cam = app.renderer.cam, a = w.atmo, ci = cellAt(a, cam.x, cam.y);
     const T = tempAt(a, w.tiles, Math.floor(clamp(cam.y, 0, w.H - 1)) * w.W + Math.floor(cam.x));
-    this.weatherEl.innerHTML = `<b>${Math.round(T)}°C · ${STORM_NAMES[a.storm[ci]]}</b><span>wind ${Math.round(Math.hypot(a.U[ci], a.V[ci]))} · ${app.renderer.mode}</span>`;
+    this.setHTML(this.weatherEl, `<b>${Math.round(T)}°C · ${STORM_NAMES[a.storm[ci]]}</b><span>wind ${Math.round(Math.hypot(a.U[ci], a.V[ci]))} · ${app.renderer.mode}</span>`);
     if (n) {
       const pop = (n._pawns?.length) ?? Object.values(w.pawns).filter((p) => p.nationId === n.id && !p.dead).length;
-      this.popEl.innerHTML = `<b>${pop}</b><span>${RACES[n.race || 'human'].name}</span>`;
+      this.setHTML(this.popEl, `<b>${pop}</b><span>${RACES[n.race || 'human'].name}</span>`);
       const tier = tierOf(n), next = TIERS[tier];
-      this.glitterEl.innerHTML = `<b>${fmtNum(n.glitter)}</b><span>Tier ${tier}${next ? ` · ${fmtNum(n.devotion)}/${next.devotion}` : ' · max'}</span>`;
+      this.setHTML(this.glitterEl, `<b>${fmtNum(n.glitter)}</b><span>Tier ${tier}${next ? ` · ${fmtNum(n.devotion)}/${next.devotion}` : ' · max'}</span>`);
       const nx = ERAS[n.era + 1];
-      this.eraEl.innerHTML = `<b>${ERAS[n.era].name}</b><span>${nx ? `${Math.floor((n.research / nx.cost) * 100)}% to ${nx.name}` : 'Final era'}</span>`;
-      this.nationPill.replaceChildren(flagCanvas(n.flag, 24, 16), h('div', { class: 'stat' }, h('b', {}, n.name), h('span', {}, GOVERNMENTS.find((g) => g.id === n.government)?.name || '')));
-      if (tier !== this.tierShown) { this.buildPowers(); toast(`Your devotion deepens: Tier ${tier} powers unlocked!`, { big: true, sound: 'era' }); }
+      this.setHTML(this.eraEl, `<b>${ERAS[n.era].name}</b><span>${nx ? `${Math.floor((n.research / nx.cost) * 100)}% to ${nx.name}` : 'Final era'}</span>`);
+      { const k = n.id + '|' + n.name + '|' + n.government + '|' + JSON.stringify(n.flag); if (k !== this._pillKey) { this._pillKey = k; this.nationPill.replaceChildren(flagCanvas(n.flag, 24, 16), h('div', { class: 'stat' }, h('b', {}, n.name), h('span', {}, GOVERNMENTS.find((g) => g.id === n.government)?.name || ''))); } }
+      if (tier !== this.tierShown) { this.buildPowers(); this.notify({ title: `Devotion deepens: Tier ${tier} powers unlocked!`, sev: 'success', icon: 'glitter', sound: 'era' }); }
       for (const p of POWERS) {
         const el = this.powerEls[p.id]; if (!el) continue;
         const cd = (n.cooldowns[p.id] || 0) - w.time;
@@ -131,12 +206,12 @@ export class HUD {
         el.style.opacity = tier >= p.tier && n.glitter < p.cost ? 0.6 : '';
       }
     } else {
-      this.nationPill.replaceChildren(h('div', { class: 'stat' }, h('b', {}, 'No nation'), h('span', {}, 'Click to choose a tribe'))); this.nationPill.onclick = () => app.chooseTribe();
+      if (this._pillKey !== 'none') { this._pillKey = 'none'; this.nationPill.replaceChildren(h('div', { class: 'stat' }, h('b', {}, 'No nation'), h('span', {}, 'Click to choose a tribe'))); this.nationPill.onclick = () => app.chooseTribe(); }
     }
     this.updatePlayers();
     this.updateFeed();
-    for (const id of ['tool-inspect', 'tool-build']) {}
     for (const [id, b] of Object.entries(this.toolBtns)) b.classList.toggle('active', app.tool === id);
+    if (this.chatBox) this.chatBox.classList.toggle('hidden', app.session.mode === 'single');
     // live windows
     const now = performance.now();
     if (now - (this._winT || 0) > 450) { this._winT = now; for (const id of ['pawn', 'settlement', 'nation', 'building', 'space']) getWindow(id)?.update(); }
@@ -154,29 +229,85 @@ export class HUD {
       ...ps.map((p) => { const n = w.nations[p.nationId]; return h('div', { class: 'p' }, h('span', { class: 'dot', style: { background: p.online ? 'var(--good)' : 'var(--muted)' } }), h('b', {}, p.name), p.id === w.hostId ? h('span', { class: 'chip' }, 'host') : null, h('span', { class: 'muted small grow', style: { textAlign: 'right' } }, n ? n.name : 'choosing…')); }));
   }
 
-  // ---------- feed ----------
+  // ---------- chronicle (small docked feed) ----------
+  buildChronicle() {
+    const app = this.app;
+    this.feedList = h('div', { class: 'list' });
+    this.unread = 0; this.chipOff = this.chipOff || new Set();
+    this.chatIn = h('input', { type: 'text', placeholder: 'Say something…', maxlength: 200, onkeydown: (e) => { e.stopPropagation(); if (e.key === 'Enter' && e.target.value.trim()) { app.session.command({ type: 'chat', text: e.target.value }); e.target.value = ''; } if (e.key === 'Escape') e.target.blur(); } });
+    this.chatBox = h('div', { class: 'chatbox' }, this.chatIn);
+    this.mineBtn = h('button', { class: `chip-btn ${this.feedMine ? 'on' : ''}`, onclick: () => { this.feedMine = !this.feedMine; this.mineBtn.classList.toggle('on', this.feedMine); this.rebuildFeed(); }, tip: 'Only show events about my nation' }, 'Mine');
+    const chip = (id, label, tip) => h('button', { class: `chip-btn ${this.chipOff.has(id) ? '' : 'on'}`, tip, onclick: (e) => { this.chipOff.has(id) ? this.chipOff.delete(id) : this.chipOff.add(id); e.currentTarget.classList.toggle('on', !this.chipOff.has(id)); this.rebuildFeed(); } }, label);
+    this.unreadEl = h('span', { class: 'unread hidden' });
+    this.lastLineEl = h('span', { class: 'last-line' }, 'Chronicle');
+    const collapseBtn = h('button', { class: 'btn sm ghost icon', onclick: () => this.setChronicleCollapsed(true), tip: 'Minimise the Chronicle', 'aria-label': 'Minimise' }, '▾');
+    this.feedFull = h('div', { class: 'glass feed chronicle' },
+      h('div', { class: 'head' }, iconImg('scroll', 2, 'px-icon sm'), h('b', {}, 'Chronicle'), h('div', { class: 'grow' }), h('button', { class: 'btn sm ghost icon', onclick: () => showSettings(app, 'gameplay'), tip: 'Feed filters in Settings', 'aria-label': 'Feed filters' }, iconImg('settings', 2, 'px-icon sm')), collapseBtn),
+      h('div', { class: 'chips' }, this.mineBtn, chip('life', 'People', 'Births, deaths, family & social'), chip('war', 'War', 'War & peace'), chip('world', 'World', 'Disasters, weather, ages & miracles'), chip('nation', 'Nation', 'Nations, eras & faith')),
+      this.feedList, this.chatBox);
+    this.feedPill = h('button', { class: 'glass chronicle-pill', onclick: () => this.setChronicleCollapsed(false), tip: 'Open the Chronicle' }, iconImg('scroll', 2, 'px-icon sm'), this.lastLineEl, this.unreadEl);
+    this.root.append(this.feedFull, this.feedPill);
+    this.setChronicleCollapsed(this.chronicleIsCollapsed(), false);
+  }
+  chronicleIsCollapsed() { const v = this.app.settings.chronicleCollapsed; return v === null || v === undefined ? innerWidth < 1100 || innerHeight < 640 : !!v; }
+  setChronicleCollapsed(v, persist = true) {
+    this.feedFull.classList.toggle('hidden', v); this.feedPill.classList.toggle('hidden', !v);
+    if (!v) { this.unread = 0; this.updateUnread(); }
+    if (persist) { this.app.settings.chronicleCollapsed = v; saveSettings(this.app.settings); }
+    this._chronCollapsed = v;
+  }
+  updateUnread() { this.unreadEl.textContent = this.unread > 99 ? '99+' : String(this.unread); this.unreadEl.classList.toggle('hidden', !this.unread); }
+  focusChat() { if (this.app.session.mode === 'single') return; this.setChronicleCollapsed(false, false); this.chatIn.focus(); }
+
   passes(e) {
     const f = this.app.settings.feedFilters;
     if (f[e.cat] === false) return false;
+    const g = CHIP_GROUP[e.cat];
+    if (g && this.chipOff.has(g)) return false;
     if (this.feedMine && this.me && e.nationId !== this.me.id && e.cat !== 'chat' && e.cat !== 'age') return false;
     return true;
   }
   feedItem(e) {
     const w = this.w, d = dateString(e.t);
-    return h('div', { class: `item c-${e.cat} ${e.big ? 'big' : ''}`, onclick: () => { if (e.pid && w.pawns[e.pid]) this.app.focusPawn(e.pid); else if (e.x !== undefined) this.app.renderer.focus(e.x, e.y, Math.max(this.app.renderer.cam.tz, 24)); } },
+    return h('div', { class: `item c-${e.cat} ${e.big ? 'big' : ''}`, onclick: () => this.flyTo(e) },
       h('span', {}, e.text), h('span', { class: 'when' }, `Y${d.year} ${d.season.slice(0, 2)}`));
   }
-  rebuildFeed() { const w = this.w; this.feedList.replaceChildren(...w.log.filter((e) => this.passes(e)).slice(-80).reverse().map((e) => this.feedItem(e))); this.lastLog = w.log.length ? w.log[w.log.length - 1].id : 0; }
+  flyTo(e) { const w = this.w; if (e.pid && w.pawns[e.pid]) this.app.focusPawn(e.pid); else if (e.x !== undefined) this.app.renderer.focus(e.x, e.y, Math.max(this.app.renderer.cam.tz, 24)); }
+  rebuildFeed() { const w = this.w; this.feedList.replaceChildren(...w.log.filter((e) => this.passes(e)).slice(-60).reverse().map((e) => this.feedItem(e))); this.lastLog = w.log.length ? w.log[w.log.length - 1].id : 0; }
   updateFeed() {
     const w = this.w, fresh = w.log.filter((e) => e.id > this.lastLog);
     if (!fresh.length) return;
     this.lastLog = fresh[fresh.length - 1].id;
+    const n = this.me, ctx = { myName: n?.name, pinned: this.app.renderer.pins, player: w.players?.[this.app.session.pid]?.name };
     for (const e of fresh) {
       this.app.onLogEvent(e);
+      const cls = classifyEvent(e, { ...ctx, mine: !!n && e.nationId === n.id });
+      if (cls) this.notify({ title: cls.title || e.text, sev: cls.sev, icon: cls.icon, x: e.x, y: e.y, pid: e.pid });
       if (!this.passes(e)) continue;
       this.feedList.prepend(this.feedItem(e));
+      this.lastLineEl.textContent = e.text;
+      if (this._chronCollapsed) { this.unread++; this.updateUnread(); }
     }
-    while (this.feedList.children.length > 120) this.feedList.lastChild.remove();
+    while (this.feedList.children.length > 80) this.feedList.lastChild.remove();
+  }
+
+  // ---------- notification cards ----------
+  notify({ title, sev = 'info', icon, x, y, pid, sound }) {
+    if (!this.notifEl) return;
+    const MAX = 5, MS = 7000;
+    while (this.notifEl.children.length >= MAX) this.notifEl.firstChild.dispatchEvent(new Event('dismiss'));
+    const clickable = pid !== undefined || x !== undefined;
+    const card = h('div', { class: `notif sev-${sev} ${clickable ? 'go' : ''}`, role: 'status' },
+      iconImg(icon || SEV_ICON[sev], 2, 'px-icon sm'), h('span', { class: 'ttl', title }, title),
+      h('button', { class: 'x', 'aria-label': 'Dismiss', onclick: (ev) => { ev.stopPropagation(); card.dispatchEvent(new Event('dismiss')); } }, '✕'));
+    let timer = null, left = MS, started = 0, gone = false;
+    const start = () => { started = performance.now(); timer = setTimeout(() => card.dispatchEvent(new Event('dismiss')), left); };
+    const stop = () => { clearTimeout(timer); left = Math.max(2500, left - (performance.now() - started)); };
+    card.addEventListener('dismiss', () => { if (gone) return; gone = true; clearTimeout(timer); card.classList.add('out'); setTimeout(() => card.remove(), 220); card.style.pointerEvents = 'none'; });
+    card.addEventListener('pointerenter', stop); card.addEventListener('pointerleave', () => { if (!gone) start(); });
+    if (clickable) card.addEventListener('click', () => { this.flyTo({ pid, x, y }); });
+    this.notifEl.append(card); start();
+    audio.play(sound || (sev === 'danger' ? 'alert' : sev === 'success' ? 'notify' : 'chat'));
   }
 
   // ---------- overlays & build menu ----------
@@ -203,7 +334,8 @@ export class HUD {
     const r = this.app.renderer, sh = r.sheetFor(p);
     const c = document.createElement('canvas'); c.width = 34 * scale; c.height = 34 * scale;
     const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
-    if (sh?.lpc) x.drawImage(sh.sheet, 7, (2) * LH + LPC_BAND.top - 4, 34, 34, 0, 0, 34 * scale, 34 * scale);
+    if (sh?.g) x.drawImage(sh.sheet, 16, 5, 34, 34, 0, 0, 34 * scale, 34 * scale);
+    else if (sh?.lpc) x.drawImage(sh.sheet, 7, (2) * LH + LPC_BAND.top - 4, 34, 34, 0, 0, 34 * scale, 34 * scale);
     else if (sh?.pack) x.drawImage(sh.sheet, 7, DIR.FRONT * PH + sh.ch.top - 2, 34, 34, 0, 0, 34 * scale, 34 * scale);
     else if (sh) x.drawImage(sh.sheet, -1, 2, 34, 34, 0, 0, 34 * scale, 34 * scale);
     return c;

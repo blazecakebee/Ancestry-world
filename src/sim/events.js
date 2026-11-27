@@ -44,6 +44,9 @@ export function stepWorldAge(world, dt, rng) {
 export function handleWorldEvents(world, events, rng) {
   for (const e of events) {
     if (e.type === 'lightning') {
+      // a Lightning Rod miracle (a zero-wind override flagged `rod`) draws bolts to itself, harmlessly
+      const rod = world.atmo.overrides.find((o) => o.rod && o.until > world.time && dist(o.x, o.y, e.x, e.y, world.W) < o.r + 6);
+      if (rod) { emitFx(world, { type: 'lightning', x: rod.x, y: rod.y }); continue; }
       emitFx(world, { type: 'lightning', x: e.x, y: e.y });
       const i = e.y * world.W + wrap(e.x, world.W);
       const s = Object.values(world.settlements).find((s) => s.until.shield > world.time && dist(s.x, s.y, e.x, e.y, world.W) < s.radius + 2);
@@ -132,7 +135,7 @@ export function fireEvent(world, id, n, s, rng) {
     case 'festival': for (const p of pawns) addThought(p, 'festival', world.time); return L('good', `${s.name} holds a joyous festival!`);
     case 'aurora': for (const p of pawns) addThought(p, 'aurora', world.time); emitFx(world, { type: 'aurora', x: s.x, y: s.y }); return L('good', `A shimmering aurora dances above ${s.name}.`);
     case 'herd': {
-      const kinds = Object.keys(ANIMALS).filter((k) => !ANIMALS[k].predator);
+      const kinds = Object.keys(ANIMALS).filter((k) => !ANIMALS[k].predator && ANIMALS[k].biomes.length); // wild kinds only (not summoned-only ones)
       const kind = rng.pick(kinds);
       for (let k = 0; k < 8; k++) { const id = world.nextId.animal++; world.animals[id] = { id, kind, x: s.x + 15 + rng.range(-3, 3), y: s.y + rng.range(-3, 3), hp: ANIMALS[kind].hp, facing: -1, t: 0 }; }
       return L('good', `A herd of ${ANIMALS[kind].name.toLowerCase()} migrates past ${s.name}.`);

@@ -1,11 +1,12 @@
 // Ancestry World — app bootstrap, game loop, input, possession, power targeting, audio & autosave.
 import { loadSettings, saveSettings, applySettings } from './ui/settings.js';
-import { h, toast, modal, wireUISounds, wireTooltips, closeAllWindows } from './ui/dom.js';
-import { initCursor, setCursor } from './ui/cursor.js';
+import { h, toast, modal, wireUISounds, wireTooltips, closeAllWindows, colorWheel } from './ui/dom.js';
+import { initCursor, setCursor, setCursorTint } from './ui/cursor.js';
 import { showMainMenu, showFlagEditor, showSettings, showCodex, showChangelog } from './ui/menu.js';
 import { HUD } from './ui/hud.js';
 import { Tutorial } from './ui/tutorial.js';
 import { autosave, saveWorld } from './ui/storage.js';
+import { autoPush } from './ui/cloud.js';
 import { Renderer } from './render/renderer.js';
 import { loadLPC } from './render/lpc.js';
 import { loadCharacterPack } from './render/charpack.js';
@@ -25,6 +26,7 @@ import { cellAt } from './world/atmosphere.js';
 import { BIOMES } from './data/biomes.js';
 import { wrap, clamp, dist } from './core/util.js';
 import { dateString } from './sim/world.js';
+import { CURRENT_VERSION } from './data/changelog.js';
 
 const SIZES = { small: [384, 192], normal: [512, 256], large: [768, 384] };
 
@@ -39,6 +41,7 @@ class App {
     const unlock = () => { audio.init(); audio.setMusicSource(this.settings.musicSource, () => this.session?.myNation?.era ?? 0, (t) => this.session && toast(`♪ Now playing: ${t.title}`, { sound: false, ms: 2600 })); removeEventListener('pointerdown', unlock); removeEventListener('keydown', unlock); };
     addEventListener('pointerdown', unlock); addEventListener('keydown', unlock);
     this.bindInput();
+    this.initBackground();
     this.setLoading('Waking the gods…', 0.2);
     await Promise.all([loadLPC(), loadCharacterPack()]);
     this.setLoading('Shaping a world…', 0.6);
@@ -105,7 +108,7 @@ class App {
     this.renderer.attach(session.world);
     session.on('tiles', (set) => this.renderer.invalidate(set));
     session.on('disconnected', (msg) => { toast(msg, { big: true, sound: 'alert' }); setTimeout(() => this.quitToMenu(), 1500); });
-    this.tool = 'inspect'; this.armed = null; this.selection = null; this.autosaveT = 0;
+    this.tool = 'inspect'; this.setArmed(null); this.selection = null; this.autosaveT = 0; this.lastAutosave = Date.now();
     this.hud = new HUD(this);
     this.tutorial = new Tutorial(this);
     this.renderer.onFxHook = (e) => this.fxSound(e);
@@ -136,10 +139,11 @@ class App {
     const w = this.session.world;
     let race = 'human', color = NATION_COLORS.find((c) => !Object.values(w.nations).some((n) => !n.dead && n.color === c)) || NATION_COLORS[1];
     const body = h('div', { class: 'col' });
+    const wheel = colorWheel({ value: color, onChange: (c) => { color = c; } });
     const render = () => body.replaceChildren(
       h('p', { class: 'muted' }, 'Every deity needs a people. Found a brand-new tribe on free land, or adopt one of the AI tribes that has no patron yet.'),
       h('div', { class: 'grid-3' }, Object.entries(RACES).map(([id, r]) => h('div', { class: `card pick ${race === id ? 'on' : ''}`, onclick: () => { race = id; render(); } }, h('b', {}, r.name), h('div', { class: 'tiny muted' }, r.desc)))),
-      h('div', { class: 'row wrap' }, NATION_COLORS.map((c) => h('div', { class: `swatch ${color === c ? 'on' : ''}`, style: { background: c }, onclick: () => { color = c; render(); } }))),
+      h('div', { class: 'small muted' }, 'Your colour on the map'), wheel,
       h('button', { class: 'btn primary', onclick: async () => { const r = await this.session.command({ type: 'claim', race, color }); if (r.ok) { m.close(); this.afterClaim(); } else toast(r.msg, { sound: 'error' }); } }, iconImg('globe'), 'Found a new tribe'),
       h('h3', {}, 'Or adopt an AI tribe'),
       ...Object.values(w.nations).filter((n) => !n.dead && !n.ownerId && !n.raider).slice(0, 12).map((n) => h('div', { class: 'card row' }, h('span', { class: 'dot', style: { background: n.color } }), h('b', { class: 'grow' }, n.name), h('span', { class: 'small muted' }, `${RACES[n.race || 'human'].name} · ${ERAS[n.era].name}`), h('button', { class: 'btn sm', onclick: async () => { const r = await this.session.command({ type: 'claim', nationId: n.id }); if (r.ok) { m.close(); this.afterClaim(); } else toast(r.msg, { sound: 'error' }); } }, 'Adopt'))));
@@ -157,7 +161,7 @@ class App {
   }
   async save(quiet = false) {
     if (!this.session || this.session.mode === 'client') return toast('Only the host can save a co-op world.', { sound: 'error' });
-    try { await saveWorld(`save:${this.session.world.seed}:${this.session.world.name}`, serializeWorld(this.session.world), this.saveMeta()); if (!quiet) toast('World saved', { sound: 'confirm' }); }
+    try { const key = `save:${this.session.world.seed}:${this.session.world.name}`, data = serializeWorld(this.session.world), meta = this.saveMeta(); await saveWorld(key, data, meta); if (!quiet) toast('World saved', { sound: 'confirm' }); autoPush(key, data, { ...meta, thumb: undefined, savedAt: Date.now() }, this.settings.cloudAuto); }
     catch (e) { console.error(e); toast('Save failed: ' + e.message, { sound: 'error' }); }
   }
   exportSave() {
@@ -166,16 +170,77 @@ class App {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${this.session.world.name.replace(/\W+/g, '_')}.awsave`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
 
+  // ---------- autosave ----------
+  tickAutosave(dt) {
+    const every = this.settings.autosaveEvery;
+    if (!every || this.session.mode === 'client') return; // only the host / single player autosaves
+    this.autosaveT += dt;
+    if (this.autosaveT >= every * 60) this.doAutosave();
+  }
+  async doAutosave(reason = 'timer') {
+    const s = this.session;
+    if (!s || s.mode === 'client' || !this.settings.autosaveEvery || this._autosaving) return;
+    if (reason !== 'timer' && Date.now() - (this.lastAutosave || 0) < 15000) return;
+    this.autosaveT = 0; this._autosaving = true; this.lastAutosave = Date.now();
+    try {
+      const w = s.world;
+      const data = serializeWorld(w), meta = this.saveMeta();
+      await autosave(`${w.seed}`, data, meta, this.settings.autosaveSlots);
+      autoPush(`auto:${w.seed}`, data, { ...meta, thumb: undefined, auto: true, savedAt: Date.now() }, this.settings.cloudAuto);
+      if (reason === 'timer') this.autosaveIndicator();
+    } catch (e) { console.warn('autosave failed', e); }
+    this._autosaving = false;
+  }
+  autosaveIndicator() {
+    if (!this._autoInd) { this._autoInd = h('div', { class: 'autosave-ind glass' }, '✓ Autosaved'); document.body.append(this._autoInd); }
+    const el = this._autoInd; el.classList.add('show'); clearTimeout(this._autoIndT);
+    this._autoIndT = setTimeout(() => el.classList.remove('show'), 1500);
+  }
+
+  // ---------- update banner ----------
+  async checkVersion() {
+    try {
+      const r = await fetch('version.json?' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) return;
+      const v = (await r.json())?.version;
+      if (!v || typeof v !== 'string' || v === CURRENT_VERSION || v === this._bannerDismissed) return;
+      this.showUpdateBanner(v);
+    } catch (e) { /* offline or dev server: ignore */ }
+  }
+  showUpdateBanner(v) {
+    if (this._banner) { if (this._banner.dataset.v === v) return; this._banner.remove(); }
+    const b = h('div', { class: 'update-banner glass', role: 'alert', 'data-v': v },
+      iconImg('star', 2, 'px-icon sm'), h('span', {}, `New update is out (v${v}) — please reload`),
+      h('button', { class: 'btn sm primary', onclick: () => location.reload() }, 'Reload'),
+      h('button', { class: 'btn sm ghost icon', 'aria-label': 'Dismiss for this session', tip: 'Dismiss for this session', onclick: () => { this._bannerDismissed = v; b.remove(); this._banner = null; } }, '✕'));
+    document.body.append(b); this._banner = b;
+  }
+  initBackground() {
+    this.checkVersion();
+    setInterval(() => this.checkVersion(), 120000);
+    addEventListener('focus', () => this.checkVersion());
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.doAutosave('hidden'); else this.checkVersion(); });
+    addEventListener('pagehide', () => this.doAutosave('unload'));
+    addEventListener('beforeunload', () => this.doAutosave('unload'));
+  }
+
   // ---------- commands from UI ----------
   setSpeed(v) { this.session?.command({ type: 'speed', speed: v, paused: false }).then((r) => !r.ok && toast(r.msg, { sound: 'error' })); }
   togglePause() { const w = this.session?.world; if (w) this.session.command({ type: 'speed', paused: !w.paused }).then((r) => !r.ok && toast(r.msg, { sound: 'error' })); }
-  setTool(t) { this.tool = t; this.armed = null; this.renderer.ghost = null; this.renderer.powerPreview = null; setCursor(t === 'build' ? 'build' : 'pointer'); this.updateModeChip(); }
+  /** Single place where the armed power changes: keeps the cursor tint and the renderer's radius brush in step. */
+  setArmed(id) {
+    this.armed = id || null;
+    const P = id ? powerById[id] : null;
+    try { setCursorTint(P ? P.color || '#ffd34d' : null); } catch (e) { /* cursor module optional */ }
+    this.renderer.brush = P ? { radius: P.radius || 2, color: P.color || '#ffd34d', power: P.id } : null;
+  }
+  setTool(t) { this.tool = t; this.setArmed(null); this.renderer.ghost = null; this.renderer.powerPreview = null; setCursor(t === 'build' ? 'build' : 'pointer'); this.updateModeChip(); }
   setOverlay(id) { this.renderer.overlay = this.renderer.overlay === id ? 'none' : id; audio.play('toggle'); if (id === 'borders') this.renderer.settings.alwaysBorders = this.renderer.overlay === 'borders'; }
   armPower(id) {
     const P = powerById[id], n = this.session?.myNation; if (!P || !n) return;
     if (this.armed === id) { this.setTool('inspect'); return; }
     if (P.target === 'self') return this.revelationDialog();
-    this.tool = 'power'; this.armed = id; setCursor('target'); this.updateModeChip();
+    this.tool = 'power'; this.setArmed(id); setCursor('target'); this.updateModeChip();
   }
   revelationDialog() {
     const m = modal('Ideological Revelation', h('div', { class: 'col' }, h('p', { class: 'muted small' }, 'Push one belief of your people by 12 points.'), ...AXES.map((ax) => h('div', { class: 'row' }, h('button', { class: 'btn sm grow', onclick: () => go(ax.id, -1) }, '← ', ax.neg), h('button', { class: 'btn sm grow', onclick: () => go(ax.id, 1) }, ax.pos, ' →')))), { icon: iconImg('scroll'), width: '460px' });
@@ -199,15 +264,14 @@ class App {
 
   // ---------- events → sound, toasts, auto-pause ----------
   onLogEvent(e) {
+    // Visible announcements are notification cards (hud.notify); here we only keep sound cues and smart auto-pause.
     const n = this.session.myNation, mine = n && e.nationId === n.id, ap = this.settings.autoPause;
     const pause = (why) => { if (this.session.mode === 'single' && !this.session.world.paused) { this.session.command({ type: 'speed', paused: true }); toast(`Auto-paused: ${why}`, { sound: 'alert' }); } };
-    if (e.cat === 'era' && mine) { toast(e.text, { big: true, sound: 'era' }); if (ap.era) pause('a new era'); }
-    else if (e.cat === 'war' && e.big && n && (e.text.includes(n.name))) { toast(e.text, { big: true, sound: 'horn', color: 'var(--bad)' }); if (ap.war && e.text.includes(`war on ${n.name}`)) pause('war declared'); }
-    else if (e.cat === 'disaster' && mine && e.severity === 'major') { toast(e.text, { sound: 'alert' }); if (ap.disaster) pause('disaster'); }
-    else if (e.cat === 'death' && this.renderer.pins.has(e.pid)) { toast(e.text, { big: true, sound: 'alert', color: 'var(--bad)' }); if (ap.favoriteDeath) pause('a pinned citizen died'); }
-    else if (e.cat === 'age') toast(e.text, { big: true, sound: 'notify' });
+    if (e.cat === 'era' && mine) { if (ap.era) pause('a new era'); }
+    else if (e.cat === 'war' && e.big && n && (e.text.includes(n.name))) { if (ap.war && e.text.includes(`war on ${n.name}`)) pause('war declared'); }
+    else if (e.cat === 'disaster' && mine && e.severity === 'major') { if (ap.disaster) pause('disaster'); }
+    else if (e.cat === 'death' && this.renderer.pins.has(e.pid)) { if (ap.favoriteDeath) pause('a pinned citizen died'); }
     else if (e.cat === 'chat') audio.play('chat');
-    else if (e.cat === 'nation' && e.big && mine) toast(e.text, { sound: 'notify' });
     else if (e.cat === 'birth' && mine) audio.play('birth', { vol: 0.5 });
   }
   fxSound(e) {
@@ -225,7 +289,7 @@ class App {
       case 'death': audio.play('death', o); break;
       case 'knock': audio.play('thud', o); break;
       case 'built': audio.play('built', o); break;
-      case 'lightning': audio.play('thunder', { vol: Math.max(0.3, o.vol) }); break;
+      case 'lightning': audio.play('thunder', { vol: Math.max(0.2, o.vol) * 0.7 }); break;
       case 'meteor': setTimeout(() => audio.play('boom', { vol: Math.max(0.4, o.vol) }), 800); break;
       case 'quake': case 'eruption': audio.play('quake', { vol: Math.max(0.4, o.vol) }); break;
       case 'power': audio.play('power', { power: e.power }); break;
@@ -290,7 +354,7 @@ class App {
         case 'nation': return this.session.myNation && this.hud.openNation(this.session.myNation.id);
         case 'codex': return showCodex();
         case 'settings': return showSettings(this);
-        case 'chat': e.preventDefault(); return this.hud.chatIn.focus();
+        case 'chat': e.preventDefault(); return this.hud.focusChat();
         case 'release': return this.possessed && this.release();
         case 'possessAttack': return this.possessed && this.session.command({ type: 'ctrl', ...this.moveVec(), act: 'once' });
         case 'pinSelected': return this.selection?.type === 'pawn' && this.togglePin(this.selection.id);
@@ -403,7 +467,7 @@ class App {
       s.update(rawDt);
       r.frame(rawDt, s);
       if (t - (this._hudT || 0) > 250) { this._hudT = t; this.hud?.update(); this.updateModeChip(); this.ambient(); }
-      if (s.mode !== 'client') { this.autosaveT += rawDt; if (this.autosaveT > this.settings.autosaveMin * 60) { this.autosaveT = 0; autosave(`${w.seed}`, serializeWorld(w), this.saveMeta(), this.settings.autosaveSlots).then(() => toast('Autosaved', { sound: false, ms: 1500 })).catch(() => {}); } }
+      this.tickAutosave(rawDt);
     }
     requestAnimationFrame((tt) => this.loop(tt));
   }

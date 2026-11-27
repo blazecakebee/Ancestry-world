@@ -50,3 +50,18 @@ export function initCursor(getTrail) {
   };
   loop();
 }
+
+/** Armed power/curse: swap in the targeting reticle tinted with the power's colour. null restores the pointer. */
+const tinted = {};
+export function setCursorTint(color) {
+  if (!color) { setCursor('pointer'); return; }
+  if (!tinted[color]) {
+    const n = parseInt(color.replace('#', '').padEnd(6, '0'), 16), tint = rgba((n >> 16) & 255, (n >> 8) & 255, n & 255), m = MAPS.target;
+    const b = new PixBuf(12, m.rows.length), pal = { ...PAL, G: tint };
+    m.rows.forEach((r, y) => [...r].forEach((ch, x) => { if (pal[ch]) b.set(x, y, pal[ch]); }));
+    const sc = 2, c = document.createElement('canvas'); c.width = 12 * sc; c.height = m.rows.length * sc;
+    const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(b.toCanvas(), 0, 0, c.width, c.height);
+    tinted[color] = `url(${c.toDataURL()}) ${m.hot[0] * sc} ${m.hot[1] * sc}, crosshair`;
+  }
+  document.body.style.setProperty('--cursor', tinted[color]);
+}

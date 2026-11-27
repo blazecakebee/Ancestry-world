@@ -494,7 +494,7 @@ export function doJob(world, p, dt, ctx) {
       let a = j.aid ? world.animals[j.aid] : null;
       if (!a) {
         let bd = 30;
-        for (const an of Object.values(world.animals)) { const d = dist(an.x, an.y, p.x, p.y, W); if (d < bd && !(ANIMALS[an.kind].size > 1.8 && n.era < 1 && !p.squad)) { bd = d; a = an; } }
+        for (const an of Object.values(world.animals)) { const d = dist(an.x, an.y, p.x, p.y, W); if (d < bd && !ANIMALS[an.kind].noHunt && !(ANIMALS[an.kind].size > 1.8 && n.era < 1 && !p.squad)) { bd = d; a = an; } }
         if (!a) return done();
         j.aid = a.id;
       }
