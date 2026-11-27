@@ -86,7 +86,7 @@ export function showMultiplayer(app) {
         h('label', { class: 'field' }, 'Your name', h('input', { type: 'text', value: name, maxlength: 24, oninput: (e) => (name = e.target.value) })),
         h('label', { class: 'field' }, 'Invite code', h('input', { type: 'text', placeholder: 'ABC123', maxlength: 6, class: 'secret', style: { textTransform: 'uppercase', letterSpacing: '.2em', fontWeight: 800 }, oninput: (e) => (code = e.target.value.toUpperCase()) })),
         h('button', { class: 'btn primary', onclick: async () => { if (code.length < 6) return toast('Enter the 6-character invite code', { sound: 'error' }); s.playerName = name; saveSettings(s); m.close(); app.joinWorld(code, name); } }, iconImg('users'), 'Join world'))),
-    h('p', { class: 'tiny muted' }, 'Tip: friends on other networks can join if the host forwards their port or deploys the server (see README). Turn on Stream-Safe mode in Settings to hide codes on screen.'),
+    h('p', { class: 'tiny muted' }, 'Co-op is peer-to-peer: share the code and friends anywhere can join — even from the GitHub Pages link. Keep the host\'s tab open. Turn on Stream-Safe mode in Settings to hide codes on screen.'),
   );
   const m = modal('Multiplayer', body, { icon: iconImg('users') });
 }

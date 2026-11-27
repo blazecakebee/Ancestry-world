@@ -19,18 +19,20 @@ npm start            # → http://localhost:8080
 
 Requires Node 18+. Open the URL in a modern desktop browser (Chrome, Edge, Firefox, Safari).
 
+**Play online:** https://blazecakebee.github.io/Ancestry-world/ (GitHub Pages — no install needed).
+
 ### Playing with friends (co-op)
 
-1. One player runs `npm start` and opens the game.
+1. Open the game (the GitHub Pages link or your local copy).
 2. **Multiplayer → Host new world**. You get a 6-letter **invite code**.
-3. Friends open `http://<host-ip>:8080`, choose **Multiplayer → Join**, and enter the code.
+3. Friends anywhere open the same link, choose **Multiplayer → Join**, and enter the code.
 
-The host's browser runs the authoritative simulation; the Node server only relays messages, so
-everyone shares **one global clock** (time, seasons, speed and pause are the same for all players).
+Co-op is **peer-to-peer over WebRTC (PeerJS)**, just like Fading Ink and Nectar's End, so it works straight
+from GitHub Pages. The host's browser runs the authoritative simulation (keep that tab open), so everyone
+shares **one global clock** — time, seasons, speed and pause are the same for all players.
 
-To play over the internet, either forward port `8080` on the host's router, or deploy the server
-(it's a single tiny Node process) to any Node host such as Render, Railway or Fly.io and share that URL.
-Set `PORT` to change the port.
+Prefer your own server? `npm start` also runs a WebSocket relay; open the game with `?relay` to use it.
+`?peerhost=…&peerport=…` points PeerJS at your own PeerJS server.
 
 > **Consent is built in:** nobody can cast miracles on your land, plan buildings in your cities, or possess
 > your citizens unless you grant them that permission (Nation → Permissions). Wars between nations are
