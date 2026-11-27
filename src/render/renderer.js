@@ -25,6 +25,7 @@ import { ANIMALS } from '../sim/combat.js';
 import { dateString } from '../sim/world.js';
 
 const CH = 16; // chunk size in tiles
+const FEAT_TONE = { [B.SAVANNA]: 'a', [B.DESERT]: 'a', [B.BEACH]: 'a', [B.TAIGA]: 's', [B.TUNDRA]: 's', [B.MOUNTAIN]: 's', [B.STEPPE]: 'a', [B.BADLANDS]: 'a', [B.AUTUMN]: 'a', [B.PEAK]: 's', [B.ICE]: 's' };
 const ZOOM = { MIN: 0.35, MAX: 112, SURFACE: 10, GLOBE: 1.6, GLOBE_FULL: 1.15 };
 const TREE_KIND = Object.fromEntries(BIOMES.filter((b) => b.tk).map((b) => [b.id, b.tk]));
 
@@ -190,7 +191,7 @@ export class Renderer {
       const owner = t.owner[i] >= 0 ? w.nations[t.owner[i]] : null;
       if (f === F.FARM || f === F.CROP_READY) ctx.drawImage(farmTile(f === F.CROP_READY ? 4 : t.crop[i] === 0 ? 0 : Math.min(3, 1 + Math.floor(t.crop[i] / 85)), owner?.era ?? 1), tx * px, ty * px, px, px);
       else if (f === F.ROAD) ctx.drawImage(roadTile(owner?.era ?? 0), tx * px, ty * px, px, px);
-      else if (f === F.ROCK || f === F.ORE || f === F.GOLD || f === F.BERRY || f === F.STUMP || f === F.RUBBLE || f === F.CRATER) ctx.drawImage(featureSprite(f, variant, f === F.BERRY ? Math.min(4, t.featHp[i]) : 0), tx * px, ty * px, px, px);
+      else if (f === F.ROCK || f === F.ORE || f === F.GOLD || f === F.BERRY || f === F.STUMP || f === F.RUBBLE || f === F.CRATER) { const ex = f === F.BERRY ? Math.min(4, t.featHp[i]) : 0, art = (f === F.ROCK || f === F.ORE || f === F.GOLD || f === F.BERRY) ? GAN.featureArt(f === F.BERRY ? 'bush' : f === F.ROCK ? 'rock' : f === F.GOLD ? 'gold' : 'ore', variant, f === F.ORE || f === F.GOLD ? 0 : ex, FEAT_TONE[b] || 'g') : null; ctx.drawImage(art || featureSprite(f, variant, ex), tx * px, ty * px, px, px); }
       if ((f === F.FARM || f === F.CROP_READY) && !lod) {
         const st = f === F.CROP_READY ? 4 : t.crop[i] === 0 ? 0 : Math.min(3, 1 + Math.floor(t.crop[i] / 85)), kind = CROP_POOL[Math.floor(hash2(x >> 1, y >> 1) * CROP_POOL.length)], cf = cropFrame(kind, st);
         if (cf) for (let k = 0; k < 4; k++) { const c2 = cf.h > 32 && ty === 0 && !(k >> 1) ? cropFrame(kind, st, true) : cf, dw = px * 0.64, dh = dw * c2.h / 32; ctx.drawImage(c2.im, c2.x, c2.y, 32, c2.h, tx * px + (k & 1) * px * 0.5 - px * 0.07, ty * px + (k >> 1) * px * 0.5 - px * 0.12 + dw - dh, dw, dh); }

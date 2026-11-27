@@ -12,6 +12,10 @@ Also available in-game: **Main menu → What's New**.
 - **New:** Bigger worlds: Small, Normal, Large and Huge planets (up to 1536x768), with more starting nations as the planet grows.
 - **New:** World generation archetypes (Pangaea, archipelago, twin continents, ice age, water world, and more) with randomised ice caps, climate, rivers, lakes and volcanoes, so no two worlds look alike.
 - **Improved:** Coastlines are smoothed: shores curve in rounded bays and headlands with a sand and foam fringe instead of stair-steps where land meets water.
+- **Improved:** Possession: the Talk action is gone, and the hint line no longer overlaps the action bar. The citizen Skills tab now shows only the top few skills, with a "Show all" toggle.
+- **New:** A Focus button appears when you zoom out or wander far from home. Click it (or press H) to fly back to your settlement.
+- **Fixed:** Pine trees no longer carry a loose trunk or stump piece beside them (the "half-cut" trees), and the clothesline sheets are gone for good.
+- **Improved:** Boulders, ore veins and berry bushes now reuse the pack's own rocks and bushes (with fruit dots and ore flecks added), so they match the trees. Stray pumpkins no longer sprout in the grass.
 - **Improved:** The Codex is rebuilt as a sidebar reference with icons, searchable cards and filters: Welcome, Powers (by tab and tier), Creeds, Traits, Races, Eras, Governments, World Ages, Biomes and Credits.
 
 ## v0.5.0 — Mountains, new lands and moonlight (2026-11-27)
@@ -21,7 +25,7 @@ Also available in-game: **Main menu → What's New**.
 - **Improved:** Smarter world generation: warped coastlines, mountain chains that grow along ridge lines inland, foothills that step down from the peaks, island arcs off the continents, patchier biome regions and a smoothing pass that removes lone speckle tiles.
 - **Improved:** Land borders blend softly into each other instead of stair-stepping, and all trees are now recolours of the existing tree sprites (autumn reds, blossom pinks, redwood greens, frosted, ashen...).
 - **New:** Dynamic lighting: a golden-hour glow at sunrise and sunset, deep blue nights, flickering fires, and people carrying a little light after dark.
-- **New:** Possession actions: punch, swing, chop, mine, harvest and talk. Pick one with the action bar or keys 1-7, then press F or click. You never harm your own people or another deity's.
+- **New:** Possession actions: punch, swing, chop, mine and harvest. Pick one with the action bar or keys 1-6, then press F or click. You never harm your own people or another deity's.
 - **New:** Cloud saves only list Ancestry World saves. Start with a founding pair (or a small family or full band) of a random race. Farm and Wild creature tabs, and a themed scrollbar on the power dock.
 - **Improved:** Pausing now freezes every animation. The zoom out to the planet is slower and ends with a planet-reveal animation, and the flat map is shown once instead of repeating.
 - **Fixed:** Removed stray dark dashes on the grass, half-cut bushes at chunk edges and the floating clotheslines.

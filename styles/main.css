@@ -400,3 +400,9 @@ p.warn { color: var(--bad); font-weight: 600; }
 .cx-num { width: 30px; height: 30px; flex: none; border-radius: 50%; background: var(--accent); color: #1b1f3a; display: grid; place-items: center; font-weight: 800; }
 .px-icon.xs { width: 14px; height: 14px; }
 @media (max-width: 720px) { .cx { grid-template-columns: 1fr; height: 74vh; } .cx-nav { flex-direction: row; overflow-x: auto; border-right: 0; padding-bottom: 4px; } .cx-n span { display: none; } }
+
+/* possession: keep the hint chip above the action bar instead of underneath it */
+.possess-bar:not(.hidden) ~ .mode-chip { bottom: 232px; }
+
+.focus-btn { position: absolute; top: 74px; left: 50%; transform: translateX(-50%); z-index: 6; box-shadow: 0 4px 18px rgba(0,0,0,.4); animation: pop .22s cubic-bezier(.2,1.2,.4,1); }
+.focus-btn.hidden { display: none; }

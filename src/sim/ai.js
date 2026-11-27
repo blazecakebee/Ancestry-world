@@ -191,7 +191,7 @@ export function startInspiration(world, p, type) {
 }
 
 // ---------- possession (direct control by a player) ----------
-export const POSSESS_MODES = ['auto', 'punch', 'swing', 'chop', 'mine', 'harvest', 'talk'];
+export const POSSESS_MODES = ['auto', 'punch', 'swing', 'chop', 'mine', 'harvest'];
 const REACH = [[0.9, 0], [0.4, 0], [1.4, 0], [0.9, 0.9], [0.9, -0.9], [0, 0.9], [0, -0.9]];
 /** First tile with one of `feats` in reach of the possessed pawn (in front first). */
 function featInReach(world, p, feats) {
@@ -223,7 +223,7 @@ function stepPossessed(world, p, dt, ctx) {
   } else p.state = 'idle';
   if (!c.act || (p._atk = (p._atk || 0) - dt) > 0) return;
   const mode = POSSESS_MODES.includes(c.mode) ? c.mode : 'auto';
-  p._atk = mode === 'swing' ? 0.04 : mode === 'talk' ? 0.1 : 0.025;
+  p._atk = mode === 'swing' ? 0.04 : 0.025;
   const fx = p.x + p.facing * 0.9, fy = p.y;
   const clicked = c.targetPawn ? world.pawns[c.targetPawn] : null;
   const animalsNear = () => Object.values(world.animals).filter((a) => !a.dead && !ANIMALS[a.kind]?.noHunt && dist(a.x, a.y, fx, fy, world.W) < 1.6);
@@ -251,12 +251,6 @@ function stepPossessed(world, p, dt, ctx) {
     case 'chop': gather([F.TREE], 'axe'); break;
     case 'mine': gather([F.ROCK, F.ORE, F.GOLD], 'pick'); break;
     case 'harvest': gather([F.BERRY, F.CROP_READY], 'hand'); break;
-    case 'talk': {
-      const q = mayTouchPawn(world, p, clicked) && dist(p.x, p.y, clicked.x, clicked.y, world.W) < 4 ? clicked
-        : pawnsNear(world, p.x, p.y, 3.2).filter((o) => mayTouchPawn(world, p, o) || (o !== p && !o.dead && o.nationId === p.nationId)).sort((a, b) => dist(a.x, a.y, p.x, p.y, world.W) - dist(b.x, b.y, p.x, p.y, world.W))[0];
-      if (q) { p.facing = dx(p.x, q.x, world.W) >= 0 ? 1 : -1; q.facing = -p.facing; socialInteraction(world, p, q, ctx.rng); p.state = 'idle'; }
-      break;
-    }
     default: { // auto: fight what is there, else work the tile ahead
       if (!fight()) { const i = featInReach(world, p, [F.TREE, F.ROCK, F.ORE, F.BERRY, F.CROP_READY, F.GOLD]); if (i >= 0) { harvestTile(world, p, i, ctx, 1); p.attackAnim = 1; p.state = 'work'; } }
     }

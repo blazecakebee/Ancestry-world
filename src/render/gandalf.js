@@ -34,10 +34,12 @@ export async function loadGandalf() {
 function rectOf(sheet, r) { const e = g(sheet); return e.ok ? { im: e.im, x: r[0], y: r[1], w: r[2], h: r[3] } : null; }
 export function prop(key) { const fr = GA.man?.frames[key]; return fr ? rectOf(fr[0], fr.slice(1)) : null; }
 
+// Entries in the pack's decor lists that are not ground cover: the clothesline (pile #2) and a pumpkin (tuft #24). Never scatter them.
+const NATURE_BAD = { pile: new Set([2]), tuft: new Set([24]) };
 /** Ground decoration pools by tone: 'g' green, 'a' autumn/dry, 's' snow. */
 export function nature(cat, tone, h) {
   const list = GA.man?.nature[cat]; if (!list) return null;
-  const pool = list.filter((r) => r[5] === tone && r[4] >= 3 && r[3] >= 3); if (!pool.length) return null; // skip the 1px-tall sliver sprites (they showed up as stray dark dashes)
+  const bad = NATURE_BAD[cat]; const pool = list.filter((r, i) => r[5] === tone && r[4] >= 3 && r[3] >= 3 && !(bad && bad.has(i))); if (!pool.length) return null; // skip the 1px-tall sliver sprites (they showed up as stray dark dashes)
   const r = pool[h % pool.length]; return rectOf(r[0], r.slice(1, 5));
 }
 
@@ -103,10 +105,71 @@ export function tree(kind, x, y, snowy, autumn = false) {
   if (kind === 'willow') return whole('weeping_willow' + (1 + (h % 3)));
   return variantTree(kind, h) || whole('tree1');
 }
+// The pine sheet also holds loose trunk pieces and stumps next to each pine; those were showing up as "half trees".
+// Keep only the biggest connected blob of each pine rect.
+const PINE_CLEAN = new Map();
+function cleanPine(key, e, p) {
+  let c = PINE_CLEAN.get(key); if (c) return c;
+  const w = p[3], h = p[4], cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const cx = cv.getContext('2d', { willReadFrequently: true }); cx.drawImage(e.im, p[1], p[2], w, h, 0, 0, w, h);
+  const id = cx.getImageData(0, 0, w, h), d = id.data, lab = new Int32Array(w * h), sizes = [0];
+  for (let i = 0; i < w * h; i++) {
+    if (lab[i] || d[i * 4 + 3] < 8) continue;
+    const L = sizes.length; sizes.push(0); const st = [i]; lab[i] = L;
+    while (st.length) {
+      const q = st.pop(); sizes[L]++; const qx = q % w, qy = (q / w) | 0;
+      for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+        const nx = qx + ox, ny = qy + oy; if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const n = ny * w + nx; if (!lab[n] && d[n * 4 + 3] >= 8) { lab[n] = L; st.push(n); }
+      }
+    }
+  }
+  let best = 1; for (let L = 2; L < sizes.length; L++) if (sizes[L] > sizes[best]) best = L;
+  for (let i = 0; i < w * h; i++) if (lab[i] !== best) d[i * 4 + 3] = 0;
+  cx.putImageData(id, 0, 0);
+  c = { im: cv, x: 0, y: 0, w, h, scale: 0.42, foot: 2 }; PINE_CLEAN.set(key, c); return c;
+}
 function pineOf(tone, h) {
   const list = (GA.man?.pines || []).filter((p) => (tone === 's' ? p[5] === 's' : p[5] === tone));
   if (!list.length) return null; const p = list[h % list.length], e = g(p[0]);
-  return e.ok ? { im: e.im, x: p[1], y: p[2], w: p[3], h: p[4], scale: 0.42, foot: 2 } : null;
+  return e.ok ? cleanPine(p.join(','), e, p) : null;
+}
+
+/** 32x32 ground art for rocks, ore, gold and berry bushes, built from the pack's own rocks/bushes so they match the trees. */
+const FEAT_ART = new Map();
+export function featureArt(kind, variant, extra, tone) {
+  if (!GA.ready) return null;
+  const key = `${kind}|${variant}|${extra}|${tone}`; let c = FEAT_ART.get(key); if (c) return c;
+  const ROCK_OK = new Set([0, 1, 2, 4, 5, 6, 7, 8, 9]); // the pack's 'rock' list also holds a pumpkin, a snow mound and some bushes
+  const pickFrom = (cat, min) => { const l = (GA.man?.nature[cat] || []).filter((r, i) => r[5] === tone && r[3] >= min && (cat !== 'rock' || ROCK_OK.has(i))); return l.length ? l[variant % l.length] : null; };
+  const cv = document.createElement('canvas'); cv.width = cv.height = 32; const cx = cv.getContext('2d', { willReadFrequently: true }); cx.imageSmoothingEnabled = false;
+  const put = (r, maxW, bx, by) => { const e = g(r[0]); if (!e.ok) return false; const w = r[3], h = r[4], k = Math.min(1, maxW / w), dw = Math.round(w * k), dh = Math.round(h * k); cx.drawImage(e.im, r[1], r[2], w, h, Math.round(bx - dw / 2), Math.round(by - dh), dw, dh); return true; };
+  let ok = false, rr = (n) => ((variant * 2654435761 + n * 40503) >>> 0) % 1000 / 1000;
+  if (kind === 'bush') {
+    const r = pickFrom('bush', 20); if (!r) return null; ok = put(r, 31, 16, 27);
+    if (ok) { // fruit: little bright dots sitting on the leaves
+      const id = cx.getImageData(0, 0, 32, 32), d = id.data, cols = [[222, 44, 72], [128, 64, 204], [245, 150, 50], [235, 70, 120]], n = 8 + Math.min(4, extra | 0) * 2;
+      for (let k = 0, tries = 0; k < n && tries < 200; tries++) {
+        const x = 2 + Math.floor(rr(tries * 2 + 1) * 28), y = 12 + Math.floor(rr(tries * 2 + 2) * 16);
+        if (d[(y * 32 + x) * 4 + 3] < 200 || d[(y * 32 + x + 1) * 4 + 3] < 200) continue;
+        const col = cols[(variant + k) % cols.length]; k++;
+        cx.fillStyle = `rgb(${col})`; cx.fillRect(x, y, 2, 2); cx.fillStyle = 'rgba(255,255,255,0.55)'; cx.fillRect(x, y, 1, 1);
+      }
+    }
+  } else {
+    const r = pickFrom('rock', 19); if (!r) return null; ok = put(r, 30, 16, 27);
+    if (ok && variant % 3 === 2) { const r2 = pickFrom('rock', 19); if (r2) put(r2, 18, 24, 29); }
+    if (ok && kind !== 'rock') { // ore flecks on the stone
+      const gold = kind === 'gold', id = cx.getImageData(0, 0, 32, 32), d = id.data, cols = gold ? [[255, 220, 80], [255, 246, 170]] : extra ? [[220, 120, 60], [240, 160, 90]] : [[200, 120, 70], [120, 200, 230]];
+      for (let k = 0, tries = 0; k < 9 && tries < 200; tries++) {
+        const x = 3 + Math.floor(rr(tries * 3 + 1) * 26), y = 14 + Math.floor(rr(tries * 3 + 2) * 14);
+        if (d[(y * 32 + x) * 4 + 3] < 200) continue; k++;
+        cx.fillStyle = `rgb(${cols[k % 2]})`; cx.fillRect(x, y, 2, 2);
+      }
+    }
+  }
+  if (!ok) return null;
+  FEAT_ART.set(key, cv); return cv;
 }
 
 /** Animated grid frames (campfire, torch, cooking area, wheat...). */

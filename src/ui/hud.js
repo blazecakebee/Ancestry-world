@@ -126,6 +126,9 @@ export class HUD {
     this.powerBar = h('div', { class: 'glass powerbar' });
     this.modeChip = h('div', { class: 'glass mode-chip hidden' });
     this.possessBar = h('div', { class: 'glass possess-bar hidden' });
+    // Focus: appears once you zoom out or drift away; flies the camera back to your capital
+    this.focusBtn = h('button', { class: 'btn primary focus-btn hidden', tip: 'Back to your settlement <span class="kbd">H</span>', onclick: () => this.focusHome() }, iconImg('house', 2, 'px-icon sm'), 'Focus');
+    this.root.append(this.focusBtn);
     this.root.append(h('div', { class: 'hud-bottom' }, this.powerBar), this.possessBar, this.modeChip);
     this.buildPowers();
     // ---- right: players + notifications ----
@@ -185,8 +188,21 @@ export class HUD {
     const key = on ? mode : '';
     if (!on || bar._mode === key) { if (!on) bar._mode = null; return; }
     bar._mode = key;
-    const A = [['auto', 'possess', 'Auto', 'Does the obvious thing: fights what is in front of you, otherwise works the tile ahead.'], ['punch', 'hand', 'Punch', 'Quick bare-handed jabs. Weak, but fast.'], ['swing', 'sword', 'Swing', 'A weapon sweep that can hit several creatures at once.'], ['chop', 'wood', 'Chop', 'Fell trees for wood.'], ['mine', 'stone', 'Mine', 'Break rock, ore and gold.'], ['harvest', 'sickle', 'Harvest', 'Pick berries and ripe crops.'], ['talk', 'chat', 'Talk', 'Chat with someone nearby: lifts spirits and builds friendships. Click a person to talk to them.']];
+    const A = [['auto', 'possess', 'Auto', 'Does the obvious thing: fights what is in front of you, otherwise works the tile ahead.'], ['punch', 'hand', 'Punch', 'Quick bare-handed jabs. Weak, but fast.'], ['swing', 'sword', 'Swing', 'A weapon sweep that can hit several creatures at once.'], ['chop', 'wood', 'Chop', 'Fell trees for wood.'], ['mine', 'stone', 'Mine', 'Break rock, ore and gold.'], ['harvest', 'sickle', 'Harvest', 'Pick berries and ripe crops.']];
     bar.replaceChildren(...A.map(([id, icon, label, tip], k) => h('button', { class: `pact ${id === mode ? 'on' : ''}`, onclick: () => pick(id), tip: `<b>${label}</b> <span class="muted">· key ${k + 1}</span><br>${tip}` }, iconImg(icon, 2, 'px-icon sm'), h('span', {}, label), h('i', { class: 'k' }, String(k + 1)))));
+  }
+
+  homeSpot() {
+    const w = this.w, n = this.me; if (!n) return null;
+    const s = w.settlements[n.capitalId] || Object.values(w.settlements).find((x) => x.nationId === n.id);
+    return s ? { x: s.x, y: s.y } : null;
+  }
+  focusHome() { const h = this.homeSpot(); if (!h) return; const r = this.app.renderer; r.focus(h.x, h.y, Math.max(r.cam.tz, 48)); audio.play('click'); }
+  updateFocusBtn() {
+    const hm = this.homeSpot(), cam = this.app.renderer.cam, w = this.w;
+    let show = false;
+    if (hm) { const dx = Math.abs(((hm.x - cam.x + w.W * 1.5) % w.W) - w.W / 2), dy = Math.abs(hm.y - cam.y); show = this.app.renderer.mode !== 'surface' || dx > 50 || dy > 40; }
+    this.focusBtn.classList.toggle('hidden', !show);
   }
 
   setHTML(el, html) { if (el._h !== html) { el._h = html; el.innerHTML = html; } }
@@ -194,6 +210,7 @@ export class HUD {
   // ---------- periodic refresh ----------
   update() {
     const w = this.w, app = this.app, n = this.me;
+    this.updateFocusBtn();
     const d = dateString(w.time), cx = app.renderer.cam.x, lt = ((w.time + cx / w.W - 0.5) % 1 + 1) % 1, hr = Math.floor(lt * 24);
     this.setHTML(this.clockEl, `<b>Year ${d.year}</b><span>${d.season} · Day ${d.day} · ${String(hr).padStart(2, '0')}:${String(Math.floor((lt * 24 % 1) * 60 / 15) * 15).padStart(2, '0')} ${hr >= 6 && hr < 19 ? '☀' : '☾'}</span>`);
     const age = WORLD_AGES[w.age?.id]; this.ageEl.textContent = age ? age.name : ''; if (age) { this.ageEl.style.color = age.color; this.ageEl.dataset.tip = age.desc; }
@@ -385,7 +402,13 @@ export class HUD {
           h('b', {}, 'Thoughts'), h('div', {}, (p.thoughts || []).slice(0, 14).map((t) => THOUGHTS[t.id] && h('div', { class: 'thought' }, h('span', {}, THOUGHTS[t.id].label), h('b', { class: THOUGHTS[t.id].mood >= 0 ? 'pos' : 'neg' }, (THOUGHTS[t.id].mood >= 0 ? '+' : '') + Math.round(THOUGHTS[t.id].mood * (t.m || 1))))), !(p.thoughts || []).length ? h('div', { class: 'small muted' }, 'Nothing much on their mind.') : null),
         );
       }
-      if (tab === 'skills') add(content, ...SKILLS.map((sk) => { const v = p.skills?.[sk.id] || { lvl: 0, passion: 0 }; return h('div', { class: 'skill' }, h('span', {}, sk.name), h('span', { class: 'flame' }, v.passion === 2 ? '🔥🔥' : v.passion === 1 ? '🔥' : ''), bar(v.lvl / 20), h('b', {}, v.lvl)); }));
+      if (tab === 'skills') {
+        // only what the citizen is actually good at (or passionate about); the rest hides behind a toggle
+        const rows = SKILLS.map((sk) => ({ sk, v: p.skills?.[sk.id] || { lvl: 0, passion: 0 } })).sort((x, y) => y.v.lvl + y.v.passion * 2 - (x.v.lvl + x.v.passion * 2));
+        const all = !!this._allSkills, shown = all ? rows : rows.filter((r, i) => i < 4 || r.v.passion > 0 && r.v.lvl > 0).slice(0, 5);
+        add(content, ...shown.map(({ sk, v }) => h('div', { class: 'skill' }, h('span', {}, sk.name), h('span', { class: 'flame' }, v.passion === 2 ? '🔥🔥' : v.passion === 1 ? '🔥' : ''), bar(v.lvl / 20), h('b', {}, v.lvl))),
+          rows.length > shown.length || all ? h('button', { class: 'btn sm ghost', onclick: () => { this._allSkills = !all; win.update(); } }, all ? 'Show top skills' : `Show all ${rows.length}`) : null);
+      }
       if (tab === 'health') {
         add(content, h('div', { class: 'row' }, h('b', {}, 'Health'), h('div', { class: 'grow' }, bar((p.hp || 0) / 100, p.hp < 40 ? 'bad' : 'good')), h('span', { class: 'small' }, Math.round(p.hp))),
           h('div', { class: 'grid-2 small' }, h('div', {}, 'Blood ', bar(p.blood ?? 1, (p.blood ?? 1) < 0.6 ? 'bad' : '')), h('div', {}, 'Pain ', bar(p.pain || 0, 'warn'))),

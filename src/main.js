@@ -266,7 +266,7 @@ class App {
     const chip = this.hud?.modeChip; if (!chip) return;
     let text = null;
     const w = this.session.world;
-    if (this.possessed && w.pawns[this.possessed]) text = `Possessing ${w.pawns[this.possessed].name} — WASD move · 1-7 pick an action · F / click to use it · R release`;
+    if (this.possessed && w.pawns[this.possessed]) text = `Possessing ${w.pawns[this.possessed].name} — WASD move · 1-6 pick an action · F / click to use it · R release`;
     else if (this.tool === 'power' && this.armed) { const P = powerById[this.armed]; text = `${P.name}: click ${P.target === 'pawn' ? 'a citizen' : P.target === 'settlement' ? 'a settlement' : 'the land'}${P.id === 'tectonic' ? ' (Shift = lower)' : ''} · right-click to cancel`; }
     else if (this.tool === 'build') text = `Planning ${BUILDINGS[this.buildType] ? this.buildType : ''}: click inside your territory · right-click to cancel`;
     chip.classList.toggle('hidden', !text); if (text) chip.textContent = text;
@@ -346,7 +346,7 @@ class App {
       if (e.target.closest?.('input, textarea, select')) return;
       if (document.querySelector('.modal-back') && e.code !== 'Escape') return;
       this.keys.add(e.code);
-      if (this.possessed && /^Digit[1-7]$/.test(e.code)) { e.preventDefault(); return this.setPossessMode(['auto', 'punch', 'swing', 'chop', 'mine', 'harvest', 'talk'][+e.code.slice(5) - 1]); }
+      if (this.possessed && /^Digit[1-6]$/.test(e.code)) { e.preventDefault(); return this.setPossessMode(['auto', 'punch', 'swing', 'chop', 'mine', 'harvest'][+e.code.slice(5) - 1]); }
       const k = this.settings.keys, act = Object.keys(k).find((a) => k[a] === e.code);
       if (!act || !this.session) { if (e.code === 'Escape' && document.querySelector('.modal-back')) document.querySelector('.modal-back .x')?.click(); return; }
       if (['Space', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10'].includes(e.code)) e.preventDefault();
