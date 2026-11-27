@@ -2,6 +2,18 @@
 
 Also available in-game: **Main menu → What's New**.
 
+## v0.7.3 — Powers that really work, and 15 new early gifts (2026-11-27)
+
+- **Fixed:** Weather powers now truly change the weather where you cast them, and it lasts: Fertile Rain rains for a day and a half, Call Snow snows and blankets the ground, Parting Clouds holds clear sunny skies for two days, Frost Nip, Gentle Thaw, Dry Spell, Heat Wave and Cold Snap hold their temperatures. Before, the sky snapped back within moments.
+- **Improved:** Weather you call affects the land: rain and sunshine make fields grow much faster, drought and heat wither them, frost and snow douse fires. The weather shows where it is: rain clouds and falling rain or snow, golden sun rays, frost glitter, heat shimmer, dry haze.
+- **Improved:** Rainbow arcs over the land, the Aurora lights the sky for a day, Guiding Breeze streams wind across the area, the Lightning Rod stands glowing where you set it.
+- **New:** Every power now has its own sound and its own visual: weather, healing, animal calls for each creature summon, war drums and horns, quakes, curses and more. No two powers look and sound the same.
+- **New:** 15 new early-game powers for a people that start with nothing: Fallen Timber, Stone Offering, Gift of Wool and Hunter's Bounty drop goods for your haulers; Healing Herbs, Hearth Blessing (cooks raw food into meals), Builders' Blessing, Call of the Wild (lures game to you), Restful Night, Elders' Wisdom (a quarter of your current research), Clear the Land, Kindred Hearts, Divine Tools, Guiding Light (a pillar of light where people work faster) and Sacred Seeds.
+- **Fixed:** Shoal of Fish now fills the larder with actual fish, Fertile Soil now also enriches good ground and fields (it used to do nothing outside deserts and tundra), and the Lightning Rod no longer stills the wind around it.
+- **Improved:** Every divine power is now checked by an automated test that casts it and verifies it changes the world.
+- **Improved:** No two kinds of building share a sprite any more: the crafting bench, workshop, tavern, storehouse, shield pylon and reactor got their own art (a ship bar, a tool shack, a watchtower and a small power house among them).
+- **Improved:** The first worship building is an Ancestor Statue.
+
 ## v0.7.2 — Tools, crafting benches and a more varied people (2026-11-27)
 
 - **New:** Personal tools and weapons: everyone carries their own kit of axes, pickaxes, swords, fishing rods, shovels and sickles, in wood, stone, iron or gold. Tools make their work much faster (chopping, mining, building, sowing, harvesting, fishing), swords hit harder in fights and hunts, and every tool wears out and breaks with use.

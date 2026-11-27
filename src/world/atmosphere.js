@@ -22,7 +22,7 @@ export function createAtmosphere(tiles) {
     T: new Float32Array(G), P: new Float32Array(G), Hm: new Float32Array(G), U: new Float32Array(G), V: new Float32Array(G),
     snow: new Float32Array(G), cloud: new Float32Array(G), precip: new Float32Array(G), storm: new Uint8Array(G), anomaly: new Float32Array(G),
     base: new Float32Array(G), land: new Float32Array(G), elev: new Float32Array(G), evap: new Float32Array(G), dry: new Float32Array(G), lat: new Float32Array(G),
-    vortices: [], overrides: [], t2: new Float32Array(G), h2: new Float32Array(G), nextVortexId: 1,
+    vortices: [], overrides: [], zones: [], t2: new Float32Array(G), h2: new Float32Array(G), nextVortexId: 1,
   };
   for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) {
     const c = gy * GW + gx; let sb = 0, sl = 0, se = 0, sv = 0, sd = 0, n = 0;
@@ -118,6 +118,7 @@ export function stepAtmosphere(a, world, dt, rng, events) {
   // divine wind overrides (Guiding Breeze)
   a.overrides = a.overrides.filter((o) => o.until > world.time);
   for (const o of a.overrides) {
+    if (o.rod) continue; // a lightning rod only draws bolts, it does not still the wind
     const gx0 = Math.floor(o.x / CS), gy0 = Math.floor(o.y / CS), r = Math.ceil(o.r / CS);
     for (let oy = -r; oy <= r; oy++) for (let ox = -r; ox <= r; ox++) {
       const c = cell(gx0 + ox, gy0 + oy);
@@ -163,6 +164,7 @@ export function stepAtmosphere(a, world, dt, rng, events) {
     if (p > 0.04 && T < 0) a.snow[c] = Math.min(1, a.snow[c] + p * dt * 3);
     else if (T > 1) a.snow[c] = Math.max(0, a.snow[c] - (T - 1) * dt * 0.12);
   }
+  applyZones(a, world, dt, cell);
   for (const v of a.vortices) { const c = cell(Math.round(v.x), Math.round(v.y)); for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) { const cc = cell(Math.round(v.x) + ox, Math.round(v.y) + oy); if (a.T[cc] > -1) a.storm[cc] = STORM.CYCLONE; } a.precip[c] = Math.max(a.precip[c], 0.6); }
 
   // 5) cyclone lifecycle: spawn over warm tropical ocean, drift with steering winds, die over land/cold
@@ -190,6 +192,38 @@ export function stepAtmosphere(a, world, dt, rng, events) {
     if ((a.storm[c] === STORM.THUNDER || a.storm[c] === STORM.CYCLONE) && rng.chance(dt * 0.12)) {
       const x = (c % GW) * CS + rng.int(0, CS - 1), y = ((c / GW) | 0) * CS + rng.int(0, CS - 1);
       events.push({ type: 'lightning', x, y });
+    }
+  }
+}
+
+// ---- divine weather zones: a power holds the sky over an area for a while (rain, snow, clear skies, heat, frost...) ----
+// zone = { kind, x, y, r (tiles), until (world time), [dT] }. Applied after the physics every step, so it lasts.
+export const ZONE_KINDS = ['rain', 'snow', 'clear', 'frost', 'thaw', 'dry', 'heat', 'cold', 'rainbow', 'aurora', 'beacon', 'wind'];
+export function zoneCells(a, z) {
+  const out = [], r = Math.max(1, Math.ceil(z.r / CS)), gx0 = Math.floor(z.x / CS), gy0 = Math.floor(z.y / CS);
+  for (let oy = -r; oy <= r; oy++) for (let ox = -r; ox <= r; ox++) {
+    if ((ox * ox + oy * oy) * CS * CS > (z.r + CS * 0.75) ** 2) continue;
+    const gy = gy0 + oy; if (gy < 0 || gy >= a.GH) continue;
+    out.push(gy * a.GW + wrap(gx0 + ox, a.GW));
+  }
+  return out;
+}
+function applyZones(a, world, dt) {
+  a.zones = (a.zones || []).filter((z) => z.until > world.time);
+  for (const z of a.zones) {
+    const cells = z._cells || (z._cells = zoneCells(a, z));
+    for (const c of cells) {
+      const s = sat(a.T[c]);
+      switch (z.kind) {
+        case 'rain': a.anomaly[c] = Math.min(a.anomaly[c], -2); a.Hm[c] = Math.max(a.Hm[c], s * 1.1); a.precip[c] = Math.max(a.precip[c], 0.3); a.cloud[c] = Math.max(a.cloud[c], 0.92); a.storm[c] = a.T[c] < 0 ? STORM.SNOW : STORM.RAIN; break;
+        case 'snow': a.anomaly[c] = Math.min(a.anomaly[c], -14); a.T[c] = Math.min(a.T[c], -4); a.precip[c] = Math.max(a.precip[c], 0.22); a.cloud[c] = Math.max(a.cloud[c], 0.9); a.storm[c] = STORM.SNOW; a.snow[c] = Math.min(1, a.snow[c] + dt * 2.5); break;
+        case 'clear': a.anomaly[c] = Math.max(a.anomaly[c], 3); a.cloud[c] = 0; a.precip[c] = 0; a.Hm[c] = Math.min(a.Hm[c], s * 0.55); if (a.storm[c] !== STORM.CYCLONE) a.storm[c] = STORM.NONE; break;
+        case 'frost': a.anomaly[c] = Math.min(a.anomaly[c], -11); a.T[c] = Math.min(a.T[c], a.base[c] - 10, -3); break;
+        case 'thaw': a.anomaly[c] = Math.max(a.anomaly[c], 9); a.T[c] = Math.max(a.T[c], a.base[c] + 6); a.snow[c] *= Math.max(0, 1 - dt * 6); break;
+        case 'dry': a.anomaly[c] = Math.max(a.anomaly[c], 4); a.Hm[c] *= Math.max(0, 1 - dt * 6); a.precip[c] = 0; a.cloud[c] = Math.min(a.cloud[c], 0.05); if (a.storm[c] !== STORM.CYCLONE && a.storm[c] !== STORM.DUST) a.storm[c] = STORM.NONE; break;
+        case 'heat': a.anomaly[c] = Math.max(a.anomaly[c], 14); a.T[c] = Math.max(a.T[c], a.base[c] + 12, 31); a.snow[c] = 0; a.Hm[c] *= Math.max(0, 1 - dt * 3); a.cloud[c] = Math.min(a.cloud[c], 0.2); a.precip[c] = Math.min(a.precip[c], 0.02); break;
+        case 'cold': a.anomaly[c] = Math.min(a.anomaly[c], -15); a.T[c] = Math.min(a.T[c], a.base[c] - 12, -8); break;
+      }
     }
   }
 }

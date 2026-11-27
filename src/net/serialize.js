@@ -35,7 +35,7 @@ export function serializeWorld(world) {
     pawns: mapStrip(world.pawns), animals: mapStrip(world.animals), squads: mapStrip(world.squads || {}), raiderNationId: world.raiderNationId || null,
     settings: world.settings || {}, hostId: world.hostId, rngState: world.rng.s,
     tiles: Object.fromEntries(TILE_ARRAYS.map((k) => [k, b64(t[k])])),
-    atmo: { ...Object.fromEntries(ATMO_ARRAYS.map((k) => [k, b64(a[k])])), vortices: a.vortices, overrides: a.overrides },
+    atmo: { ...Object.fromEntries(ATMO_ARRAYS.map((k) => [k, b64(a[k])])), vortices: a.vortices, overrides: a.overrides, zones: (a.zones || []).map(({ _cells, ...z }) => z) },
     waterActive: [...world.waterActive], fireActive: [...world.fireActive], drops: world.drops || {},
   };
 }
@@ -48,7 +48,7 @@ export function deserializeWorld(s) {
   const atmo = createAtmosphere(tiles);
   const at = { T: Float32Array, P: Float32Array, Hm: Float32Array, U: Float32Array, V: Float32Array, cloud: Float32Array, precip: Float32Array, storm: Uint8Array, anomaly: Float32Array, snow: Float32Array };
   for (const k of ATMO_ARRAYS) if (s.atmo[k]) atmo[k] = unb64(s.atmo[k], at[k]);
-  atmo.vortices = s.atmo.vortices || []; atmo.overrides = s.atmo.overrides || [];
+  atmo.vortices = s.atmo.vortices || []; atmo.overrides = s.atmo.overrides || []; atmo.zones = s.atmo.zones || [];
   setNextPawnId(m.nextPawnId || 1 + Math.max(0, ...Object.keys(s.pawns).map(Number)));
   const world = {
     version: 1, name: m.name, seed: m.seed, W: m.W, H: m.H, time: m.time, yearLen: YEAR_LEN, tick: 0, speed: m.speed || 1, paused: false,
@@ -80,13 +80,13 @@ export function applyTileRecord(t, r) {
 }
 export function atmoPacket(a) {
   const q = (arr, s) => Array.from(arr, (v) => Math.round(v * s));
-  return { T: q(a.T, 10), P: q(a.P, 10), Hm: q(a.Hm, 1000), U: q(a.U, 10), V: q(a.V, 10), cloud: q(a.cloud, 100), precip: q(a.precip, 1000), storm: Array.from(a.storm), snow: q(a.snow, 100), anomaly: q(a.anomaly, 10), vortices: a.vortices };
+  return { T: q(a.T, 10), P: q(a.P, 10), Hm: q(a.Hm, 1000), U: q(a.U, 10), V: q(a.V, 10), cloud: q(a.cloud, 100), precip: q(a.precip, 1000), storm: Array.from(a.storm), snow: q(a.snow, 100), anomaly: q(a.anomaly, 10), vortices: a.vortices, zones: (a.zones || []).map(({ _cells, ...z }) => z), overrides: a.overrides };
 }
 export function applyAtmo(a, pk) {
   const d = (k, s) => { const src = pk[k]; if (!src) return; for (let i = 0; i < src.length; i++) a[k][i] = src[i] / s; };
   d('T', 10); d('P', 10); d('Hm', 1000); d('U', 10); d('V', 10); d('cloud', 100); d('precip', 1000); d('snow', 100); d('anomaly', 10);
   if (pk.storm) a.storm.set(pk.storm);
-  a.vortices = pk.vortices || [];
+  a.vortices = pk.vortices || []; if (pk.zones) a.zones = pk.zones; if (pk.overrides) a.overrides = pk.overrides;
 }
 export function applyFast(world, arr) {
   const seen = new Set();

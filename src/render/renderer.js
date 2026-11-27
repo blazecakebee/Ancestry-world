@@ -12,7 +12,7 @@ import * as GAN from './gandalf.js';
 import { loadFarm, farmFrame, cropFrame } from './farm.js';
 // which Modern Farm crop (row in crops.png) a field draws: staples common, exotics rare
 // how wide a Modern Farm sprite is drawn relative to the building's (already enlarged) footprint
-const FIT_NAME = { 'me:statue_brown': 0.5, 'me:statue_grey': 0.5, 'me:statue_angel': 0.7, 'me:fountain3': 0.95, 'me:fountain2': 0.75, 'me:windmill': 0.7, 'me:radiotower': 0.75, 'me:turbine': 0.6,
+const FIT_NAME = { 'me:shipbar': 0.95, 'me:junkshack': 0.8, 'me:watchtower': 0.5, 'me:powersmall': 0.85, diy: 0.85, silo2: 0.5, 'me:statue_brown': 0.5, 'me:statue_grey': 0.5, 'me:statue_angel': 0.7, 'me:fountain3': 0.95, 'me:fountain2': 0.75, 'me:windmill': 0.7, 'me:radiotower': 0.75, 'me:turbine': 0.6,
   'me:helipad': 1.2, 'me:palace': 1.2, 'me:hospital': 1.35, 'me:school': 1.2, 'me:clocktower': 0.8, 'me:coffee': 0.6, 'me:mushroom': 0.65, 'me:chapel': 0.8, 'me:tent_mil': 1.0, 'me:hangar': 1.15, 'me:mall': 1.35, 'me:greenhouse': 1.05 };
 const MF_FIT = { storage: 1.05, kitchen: 1.0, workshop: 0.95, tailor: 0.8, well: 0.7, coop: 0.85, market: 1.05, hut: 1.0, center: 1.1, tavern: 1.05, barracks: 1.15, healer: 0.85, stable: 1.4 };
 const CROP_POOL = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
@@ -518,6 +518,7 @@ export class Renderer {
         if (d.n >= 2 && T > 30) { ctx.font = `bold ${Math.max(9, 10 * s)}px system-ui`; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.strokeText(Math.round(d.n), sx + 10 * k, sy - 4 * k); ctx.fillStyle = '#fff'; ctx.fillText(Math.round(d.n), sx + 10 * k, sy - 4 * k); }
       }
     }
+    this.drawZones(ctx, T);
     this.fx.draw(ctx, c, this.worldToScreen);
     for (const em of this.fx.emotes) { const p = w.pawns[em.pid]; if (!p || p.rx === undefined) continue; const [sx, sy] = this.worldToScreen(p.rx, p.ry); this.fx.drawEmote(ctx, em, sx, sy - 46 * s, T); }
     this.drawWeather(ctx, dt);
@@ -824,6 +825,75 @@ export class Renderer {
       if (pinned) { ctx.fillStyle = '#ffd34d'; ctx.beginPath(); ctx.moveTo(sx, headY - 26); ctx.lineTo(sx - 4, headY - 32); ctx.lineTo(sx + 4, headY - 32); ctx.fill(); }
     }
     if (selected) { ctx.strokeStyle = '#ffd34d'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(sx, sy, 9 * S, 3.5 * S, 0, 0, 7); ctx.stroke(); }
+  }
+
+  /** Divine weather & blessings that last: drawn where they are, so a cast is visible from anywhere on screen. */
+  drawZones(ctx, T) {
+    const w = this.world, a = w.atmo, now = w.time, t = this.time;
+    const zs = (a.zones || []).filter((z) => z.until > now);
+    for (const o of a.overrides || []) if (o.rod && o.until > now) zs.push({ kind: 'rod', x: o.x + 0.5, y: o.y + 0.5, r: 2, until: o.until, since: o.until - 3 });
+    if (!zs.length) return;
+    ctx.save();
+    for (const z of zs) {
+      const [sx, sy] = this.worldToScreen(z.x, z.y), R = z.r * T;
+      if (sx < -R * 2 || sx > this.W + R * 2 || sy < -R * 2 || sy > this.H + R * 2) continue;
+      const left = z.until - now, fade = Math.min(1, left * 4, (now - (z.since ?? now - 1)) * 6 + 0.2);
+      const tint = (col, al) => { const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, R); g.addColorStop(0, col.replace('A', al)); g.addColorStop(1, col.replace('A', 0)); ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(sx, sy, R, R * 0.75, 0, 0, 7); ctx.fill(); };
+      ctx.globalAlpha = fade;
+      switch (z.kind) {
+        case 'clear': {
+          tint('rgba(255,236,170,A)', 0.22);
+          ctx.globalCompositeOperation = 'lighter';
+          for (let k = 0; k < 6; k++) { const off = (k - 2.5) * R * 0.32, ww = T * (0.8 + (k % 3) * 0.4); ctx.globalAlpha = fade * 0.1 * (0.6 + 0.4 * Math.sin(t * 0.8 + k * 1.7)); ctx.fillStyle = '#fff0b0';
+            ctx.beginPath(); ctx.moveTo(sx + off + T * 8 - ww, sy - T * 26); ctx.lineTo(sx + off + T * 8 + ww, sy - T * 26); ctx.lineTo(sx + off + ww * 2.2, sy + R * 0.4); ctx.lineTo(sx + off - ww * 2.2, sy + R * 0.4); ctx.fill(); }
+          ctx.globalCompositeOperation = 'source-over'; break;
+        }
+        case 'rain': case 'snow': {
+          ctx.globalAlpha = fade * 0.45; ctx.fillStyle = z.kind === 'rain' ? '#4a5266' : '#8a94a8';
+          for (let k = 0; k < 7; k++) { ctx.beginPath(); ctx.ellipse(sx + (k - 3) * R * 0.27 + Math.sin(t * 0.3 + k) * T, sy - R * 0.9 - T * 3 + Math.sin(k * 2.3) * T, R * 0.26, T * 1.4, 0, 0, 7); ctx.fill(); }
+          ctx.globalAlpha = fade * 0.7;
+          for (let k = 0; k < 40; k++) { const px = sx + (((k * 97.3 + (z.kind === 'rain' ? t * 40 : t * 6) * (k % 3 + 1)) % (R * 2)) - R) * 0.95, ph = ((t * (z.kind === 'rain' ? 1.6 : 0.35) + k * 0.137) % 1), py = sy - R * 0.9 - T * 2 + ph * (R * 1.6 + T * 2);
+            if (z.kind === 'rain') { ctx.strokeStyle = 'rgba(180,210,255,0.8)'; ctx.lineWidth = Math.max(1, T / 20); ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px - T * 0.15, py - T * 0.7); ctx.stroke(); }
+            else { ctx.fillStyle = '#ffffff'; const s2 = Math.max(1.5, T / 12); ctx.fillRect(px + Math.sin(t * 2 + k) * T * 0.4, py, s2, s2); } }
+          break;
+        }
+        case 'frost': tint('rgba(200,235,255,A)', 0.32); for (let k = 0; k < 14; k++) { const ang = k * 2.4, rr = (k % 5 + 1) / 6 * R; ctx.globalAlpha = fade * (0.5 + 0.5 * Math.sin(t * 3 + k)); ctx.fillStyle = '#ffffff'; ctx.fillRect(sx + Math.cos(ang) * rr, sy + Math.sin(ang) * rr * 0.7, T / 8, T / 8); } break;
+        case 'cold': tint('rgba(150,190,255,A)', 0.28); break;
+        case 'thaw': tint('rgba(255,200,140,A)', 0.18); break;
+        case 'dry': tint('rgba(220,180,100,A)', 0.26); break;
+        case 'heat': {
+          tint('rgba(255,140,60,A)', 0.26);
+          ctx.strokeStyle = 'rgba(255,220,170,0.35)'; ctx.lineWidth = Math.max(1, T / 14);
+          for (let k = 0; k < 6; k++) { const y0 = sy - R * 0.5 + k * R * 0.18; ctx.beginPath(); for (let x0 = -R * 0.7; x0 <= R * 0.7; x0 += T * 0.5) ctx.lineTo(sx + x0, y0 + Math.sin(x0 / T + t * 4 + k) * T * 0.25); ctx.stroke(); }
+          break;
+        }
+        case 'rainbow': {
+          const cols = ['#ff5a5a', '#ffa64a', '#ffe066', '#6fe07a', '#5fa8ff', '#9a7aff'], lw = Math.max(2, T * 0.4);
+          ctx.lineWidth = lw; ctx.globalAlpha = fade * (0.45 + 0.1 * Math.sin(t * 1.5));
+          cols.forEach((c, i) => { ctx.strokeStyle = c; ctx.beginPath(); ctx.arc(sx, sy + R * 0.2, R - i * lw, Math.PI * 1.05, -Math.PI * 0.05); ctx.stroke(); });
+          break;
+        }
+        case 'beacon': case 'rod': {
+          const ww = z.kind === 'rod' ? T * 0.6 : T * 1.6, g = ctx.createLinearGradient(sx - ww, 0, sx + ww, 0), col = z.kind === 'rod' ? '255,246,176' : '255,242,168';
+          g.addColorStop(0, `rgba(${col},0)`); g.addColorStop(0.5, `rgba(${col},${z.kind === 'rod' ? 0.35 : 0.4})`); g.addColorStop(1, `rgba(${col},0)`);
+          ctx.globalAlpha = fade * (0.75 + 0.25 * Math.sin(t * 2)); ctx.fillStyle = g; ctx.fillRect(sx - ww, sy - T * 28, ww * 2, T * 28);
+          if (z.kind === 'rod') { ctx.globalAlpha = fade; ctx.fillStyle = '#d8b060'; ctx.fillRect(sx - T * 0.08, sy - T * 3, T * 0.16, T * 3); ctx.fillStyle = Math.sin(t * 9) > 0 ? '#ffffff' : '#fff2a0'; ctx.fillRect(sx - T * 0.2, sy - T * 3.3, T * 0.4, T * 0.4); }
+          else tint('rgba(255,242,168,A)', 0.18);
+          break;
+        }
+        case 'wind': {
+          const ang = z.ang || 0, ca = Math.cos(ang), sa = Math.sin(ang);
+          ctx.strokeStyle = 'rgba(235,245,255,0.6)'; ctx.lineWidth = Math.max(1, T / 14);
+          for (let k = 0; k < 18; k++) { const ph = (t * 0.7 + k * 0.173) % 1, off = ((k * 37) % 20 - 10) / 10 * R * 0.7, px = sx + ca * (ph - 0.5) * R * 1.6 - sa * off, py = sy + sa * (ph - 0.5) * R * 1.2 + ca * off * 0.6;
+            ctx.globalAlpha = fade * Math.sin(ph * Math.PI) * 0.8; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px - ca * T * 1.4, py - sa * T); ctx.stroke(); }
+          break;
+        }
+      }
+    }
+    ctx.restore();
+    // the aurora fills the sky while it lasts
+    const au = zs.find((z) => z.kind === 'aurora');
+    if (au) { const al = Math.min(1, (au.until - now) * 2) * (0.22 + 0.08 * Math.sin(t * 0.7)); const g = ctx.createLinearGradient(0, 0, 0, this.H * 0.55); g.addColorStop(0, `rgba(90,255,180,${al})`); g.addColorStop(0.5, `rgba(140,120,255,${al * 0.6})`); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, this.W, this.H * 0.55); }
   }
 
   drawWeather(ctx, dt) {

@@ -29,24 +29,24 @@ export const itemUrl = (id) => `${BASE}items/${id}.png`;
 // LimeZu "Modern Exteriors": towns grow from tents and barns into Victorian streets, then offices, malls and condos.
 // A list picks per building (variety on the same street).
 const PICK = {
-  center: [null, 'barn_small', 'barn_small', 'house2', 'me:palace', 'me:palace', 'me:clocktower', 'me:office1', 'me:office2', 'me:condo6'],
-  hut: [null, null, 'barn_small', 'house1', ['house1', 'house2'], ['me:victorian5', 'me:victorian1', 'me:victorian4'], ['me:terraced1', 'me:terraced4', 'me:terraced2'], ['me:onestory', 'me:country', 'me:japanese'], ['me:modern', 'me:villa'], ['me:condo9', 'me:condo4', 'me:condo3']],
-  storage: ['canopy_tools', 'canopy_tools', 'canopy_tools', 'hayloft', 'hayloft', 'hayloft', 'silo', 'me:hardware', 'me:hangar', 'me:hangar'],
+  center: [null, 'barn_small', 'barn_small', 'barn_small', 'me:palace', 'me:palace', 'me:clocktower', 'me:office1', 'me:office2', 'me:condo6'],
+  hut: [null, null, 'house1', 'house1', ['house1', 'house2'], ['me:victorian5', 'me:victorian1', 'me:victorian4'], ['me:terraced1', 'me:terraced4', 'me:terraced2'], ['me:onestory', 'me:country', 'me:japanese'], ['me:modern', 'me:villa'], ['me:condo9', 'me:condo4', 'me:condo3']],
+  storage: ['canopy_tools', 'canopy_tools', 'canopy_tools', 'hayloft', 'hayloft', 'hayloft', 'silo', 'silo2', 'me:hangar', 'me:hangar'],
   kitchen: [null, 'oven', 'oven', 'oven', 'oven', 'oven', 'me:coffee', 'me:coffee', 'me:mushroom', 'me:mushroom'],
-  workshop: [null, 'woodwork', 'woodwork', 'woodwork', 'woodwork', 'diy', 'diy', 'me:hardware', 'me:hardware', 'me:hardware'],
-  bench: ['woodwork', 'woodwork', 'woodwork', 'woodwork', 'woodwork', 'woodwork', 'diy', 'diy', 'me:hardware', 'me:hardware'],
+  workshop: [null, 'woodwork', 'woodwork', 'woodwork', 'woodwork', 'woodwork', 'woodwork', 'me:hardware', 'me:hardware', 'me:hardware'],
+  bench: ['diy', 'diy', 'diy', 'diy', 'diy', 'diy', 'me:junkshack', 'me:junkshack', 'me:junkshack', 'me:junkshack'],
   tailor: ['tailor', 'tailor', 'tailor', 'tailor', 'tailor', 'tailor', 'me:postoffice', 'me:postoffice', 'me:postoffice', 'me:postoffice'],
   market: [null, null, 'market', 'market2', 'me:marketmed', 'me:marketmed', 'me:marketbig', 'me:mall', 'me:mall', 'me:mall'],
   well: [null, 'well', 'well', 'well', 'well', 'me:windmill', 'me:windmill', 'me:fountain2', 'me:fountain2', 'me:fountain2'],
   coop: [null, 'coop', 'coop', 'henhouse', 'coop', 'henhouse', 'me:greenhouse', 'me:greenhouse', 'me:greenhouse', 'me:greenhouse'],
-  tavern: [null, null, 'house1', 'house1', 'house1', 'house2', 'me:coffee', 'me:hotel', 'me:mushroom', 'me:mushroom'],
+  tavern: [null, null, 'me:shipbar', 'me:shipbar', 'me:shipbar', 'me:shipbar', 'me:hotel', 'me:hotel', 'me:hotel', 'me:hotel'],
   barracks: [null, null, 'me:tent_mil', 'me:tent_mil', 'stable', 'stable', 'me:dorm', 'me:police', 'me:bunker', 'me:bunker'],
   healer: [null, null, null, null, null, null, 'me:hospital', 'me:hospital', 'me:hospital', 'me:hospital'],
   temple: ['me:statue_brown', 'me:statue_brown', 'me:statue_grey', 'me:statue_grey', 'me:statue_angel', 'me:chapel', 'me:chapel', 'me:fountain3', 'me:fountain3', 'me:fountain3'],
   research: [null, null, null, null, null, 'me:school', 'me:school', 'me:school', 'me:radiotower', 'me:radiotower'],
   factory: [null, null, null, null, null, null, 'me:powerhouse', 'me:powerhouse', 'me:powerhouse', 'me:powerhouse'],
-  reactor: [null, null, null, null, null, null, null, 'me:powerhouse', 'me:turbine', 'me:turbine'],
-  shield: [null, null, null, null, null, null, null, null, 'me:radiotower', 'me:radiotower'],
+  reactor: [null, null, null, null, null, null, null, 'me:powersmall', 'me:turbine', 'me:turbine'],
+  shield: [null, null, null, null, null, null, null, null, 'me:watchtower', 'me:watchtower'],
   launch: [null, null, null, null, null, null, null, null, null, 'me:helipad'],
 };
 /** Animated sprites: name -> frame count (frames laid out left to right). */
@@ -56,7 +56,6 @@ export function mfName(type, era, variant = 0) {
   const row = PICK[type]; if (!row) return null;
   let n = row[Math.min(era, row.length - 1)];
   if (Array.isArray(n)) n = n[Math.abs(variant) % n.length];
-  if (n === 'house1' && type === 'hut' && variant % 3 === 2 && era === 3) return 'barn_small';
   return n;
 }
 const tinted = new Map();

@@ -131,8 +131,27 @@ const MORE = [
   { id: 'volcano', name: 'Volcano', tier: 3, cost: 330, cd: 20, target: 'tile', cat: 'world', color: '#ff5a2a', radius: 3, icon: 'at:fire', desc: 'A volcano bursts through the ground, scorching the land around it into ashlands.' },
 ];
 
-for (const P of [...CORE, ...NEW, ...MORE]) if (P.target === 'tile' && P.radius >= 2) P.radius = Math.round(P.radius * 1.35); // bigger brushes: miracles should feel like miracles
-export const POWERS = [...CORE, ...NEW, ...MORE].sort((a, b) => a.tier - b.tier);
+// ---- v0.7.3: early-game gifts for a people that start with nothing ----
+const EARLY = [
+  { id: 'timber', name: 'Fallen Timber', tier: 1, cost: 12, cd: 2, target: 'tile', cat: 'nature', color: '#b9773e', radius: 1, icon: 'rv:p_timber', desc: 'A dozen logs tumble from the sky. Haulers carry them home.' },
+  { id: 'stonegift', name: 'Stone Offering', tier: 1, cost: 14, cd: 2, target: 'tile', cat: 'world', color: '#a7a9b3', radius: 1, icon: 'rv:p_stonegift', desc: 'Ten good building stones rise out of the ground.' },
+  { id: 'herbs', name: 'Healing Herbs', tier: 1, cost: 14, cd: 2, target: 'tile', cat: 'life', color: '#46c7a8', radius: 3, icon: 'rv:p_herbs', desc: 'Medicinal herbs sprout: a few doses of medicine, and small wounds nearby close.' },
+  { id: 'hearth', name: 'Hearth Blessing', tier: 1, cost: 16, cd: 3, target: 'settlement', cat: 'divine', color: '#ff8a3c', radius: 0, icon: 'rv:p_hearth', desc: 'The fires of a settlement blaze: raw food is cooked into meals and everyone warms up.' },
+  { id: 'builders', name: "Builders' Blessing", tier: 1, cost: 18, cd: 3, target: 'settlement', cat: 'divine', color: '#e0b060', radius: 0, icon: 'rv:p_builders', desc: 'Every building under construction in a settlement leaps forward by a third.' },
+  { id: 'lure', name: 'Call of the Wild', tier: 1, cost: 10, cd: 2, target: 'tile', cat: 'wild', color: '#c8b070', radius: 3, icon: 'rv:p_lure', desc: 'Grazing beasts from far around wander toward the spot for a day: easy hunting.' },
+  { id: 'restful', name: 'Restful Night', tier: 1, cost: 12, cd: 3, target: 'settlement', cat: 'life', color: '#8fa0ff', radius: 0, icon: 'rv:p_restful', desc: 'Everyone in a settlement wakes fully rested and cheerful.' },
+  { id: 'wisdom', name: "Elders' Wisdom", tier: 1, cost: 20, cd: 4, target: 'self', cat: 'divine', color: '#d58cff', radius: 0, icon: 'rv:p_wisdom', desc: 'A vision of knowledge: a quarter of your current research is completed at once.' },
+  { id: 'clearing', name: 'Clear the Land', tier: 1, cost: 12, cd: 2, target: 'tile', cat: 'world', color: '#9fd36a', radius: 2, icon: 'rv:p_clearing', desc: 'Trees, boulders and stumps vanish, leaving their logs and stones behind.' },
+  { id: 'matchmaker', name: 'Kindred Hearts', tier: 1, cost: 16, cd: 3, target: 'tile', cat: 'life', color: '#ff5f8a', radius: 6, icon: 'rv:p_matchmaker', desc: 'Two single adults nearby fall in love.' },
+  { id: 'toolgift', name: 'Divine Tools', tier: 1, cost: 18, cd: 3, target: 'tile', cat: 'divine', color: '#c9d2dc', radius: 5, icon: 'rv:p_toolgift', desc: 'Workers nearby who lack the right tool for their trade each receive a stone one.' },
+  { id: 'beacon', name: 'Guiding Light', tier: 1, cost: 14, cd: 3, target: 'tile', cat: 'divine', color: '#fff2a8', radius: 5, icon: 'rv:p_beacon', desc: 'A pillar of light for a day and a half: people working beneath it work faster, and crops grow a little quicker.' },
+  { id: 'seeds', name: 'Sacred Seeds', tier: 1, cost: 16, cd: 3, target: 'settlement', cat: 'farm', color: '#d9a63a', radius: 0, icon: 'rv:p_seeds', desc: 'Every field of a settlement is sown at once and sprouts well along.' },
+  { id: 'wool', name: 'Gift of Wool', tier: 1, cost: 12, cd: 2, target: 'tile', cat: 'farm', color: '#f2eee2', radius: 1, icon: 'rv:p_wool', desc: 'Soft wool and hides fall from the clouds: enough to clothe a family.' },
+  { id: 'bounty', name: "Hunter's Bounty", tier: 1, cost: 14, cd: 2, target: 'tile', cat: 'wild', color: '#d0603c', radius: 1, icon: 'rv:p_bounty', desc: 'A generous haul of meat and hides appears, as if from a great hunt.' },
+];
+
+for (const P of [...CORE, ...NEW, ...MORE, ...EARLY]) if (P.target === 'tile' && P.radius >= 2) P.radius = Math.round(P.radius * 1.35); // bigger brushes: miracles should feel like miracles
+export const POWERS = [...CORE, ...NEW, ...MORE, ...EARLY].sort((a, b) => a.tier - b.tier);
 export const POWER_CATS = [
   ['divine', 'Divine'], ['nature', 'Nature'], ['life', 'Life'], ['farm', 'Farm'], ['wild', 'Wild'], ['war', 'War'], ['curses', 'Curses'], ['world', 'World'],
 ];

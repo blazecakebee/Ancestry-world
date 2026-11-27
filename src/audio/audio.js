@@ -1,6 +1,71 @@
 // Procedural audio: every sound is synthesized with WebAudio (no files needed).
 // Channels: master, music (era music), ambient (weather/space), ui, miracles, world (citizens, combat, building).
 export const CHANNELS = ['master', 'music', 'ambient', 'ui', 'miracles', 'world'];
+import { POWER_FX } from '../data/powerfx.js';
+const arp = (T, fs, o = {}) => { const { step = 0.06, delay = 0, ...rest } = o; fs.forEach((f, i) => T({ type: 'sine', dur: 0.4, vol: 0.09, verb: 0.6, ...rest, f, delay: delay + i * step })); };
+// Synth recipes for divine powers: (T = tone, N = noise burst, k = pitch factor). Each is a short, recognisable gesture.
+export const POWER_SOUNDS = {
+  chime: (T, N, k) => arp(T, [784, 988, 1175, 1568].map((f) => f * k), { type: 'triangle', dur: 0.6 }),
+  idea: (T, N, k) => { T({ f: 880 * k, f2: 1760 * k, type: 'sine', dur: 0.25, vol: 0.12 }); T({ f: 2637 * k, type: 'triangle', dur: 0.5, vol: 0.07, delay: 0.18, verb: 0.7 }); },
+  choir: (T, N, k) => [261, 329, 392, 523].forEach((f, i) => T({ f: f * k, type: 'sawtooth', dur: 1.6, vol: 0.04, attack: 0.35, delay: i * 0.04, verb: 0.9 })),
+  harp: (T, N, k) => arp(T, [523, 659, 784, 1046, 1318, 1568].map((f) => f * k), { type: 'triangle', dur: 0.7, step: 0.05 }),
+  chatter: (T, N, k) => { for (let i = 0; i < 8; i++) T({ f: (300 + Math.random() * 400) * k, f2: (500 + Math.random() * 300) * k, type: 'triangle', dur: 0.07, vol: 0.06, delay: i * 0.07 }); },
+  crackle: (T, N, k) => { N({ dur: 1.2, vol: 0.12, filter: 'lowpass', f: 900 * k, f2: 300 }); for (let i = 0; i < 10; i++) N({ dur: 0.03, vol: 0.08, f: 2500 * k, q: 6, delay: Math.random() * 1.1 }); T({ f: 110 * k, f2: 80, type: 'sine', dur: 0.8, vol: 0.1 }); },
+  hammers: (T, N, k) => { for (let i = 0; i < 4; i++) { T({ f: 320 * k, f2: 220 * k, type: 'square', dur: 0.06, vol: 0.08, delay: i * 0.16 }); N({ dur: 0.05, vol: 0.1, f: 1500 * k, q: 2, delay: i * 0.16 }); } arp(T, [523, 659, 784].map((f) => f * k), { delay: 0.7 }); },
+  pages: (T, N, k) => { for (let i = 0; i < 3; i++) N({ dur: 0.18, vol: 0.08, f: 3000 * k, f2: 1200 * k, q: 0.8, delay: i * 0.14 }); T({ f: 1046 * k, type: 'sine', dur: 0.8, vol: 0.07, delay: 0.45, verb: 0.8 }); },
+  anvil: (T, N, k) => { T({ f: 1900 * k, type: 'square', dur: 0.15, vol: 0.06, verb: 0.4 }); T({ f: 2650 * k, type: 'sine', dur: 0.6, vol: 0.06, verb: 0.5 }); T({ f: 1900 * k, type: 'square', dur: 0.12, vol: 0.05, delay: 0.25 }); },
+  hum: (T, N, k) => { T({ f: 220 * k, type: 'sine', dur: 1.8, vol: 0.12, attack: 0.4, verb: 0.8 }); T({ f: 330 * k, type: 'sine', dur: 1.6, vol: 0.06, attack: 0.5, delay: 0.1, verb: 0.8 }); },
+  bell: (T, N, k) => { for (const [f, v] of [[440, 0.12], [880, 0.06], [1320, 0.04], [1760, 0.03]]) T({ f: f * k, type: 'sine', dur: 2.2, vol: v, verb: 0.9 }); },
+  fanfare: (T, N, k) => [[392, 0], [523, 0.15], [659, 0.3], [784, 0.45], [1046, 0.6]].forEach(([f, d]) => T({ f: f * k, type: 'sawtooth', dur: 0.3, vol: 0.06, delay: d, verb: 0.5 })),
+  rain: (T, N, k) => { N({ dur: 2.2, vol: 0.12, filter: 'bandpass', f: 1900 * k, q: 0.4, verb: 0.3 }); for (let i = 0; i < 14; i++) T({ f: (1400 + Math.random() * 900) * k, f2: 600 * k, type: 'sine', dur: 0.05, vol: 0.04, delay: Math.random() * 1.6 }); },
+  wind: (T, N, k) => N({ dur: 2, vol: 0.14, filter: 'bandpass', f: 400 * k, f2: 1400 * k, q: 1.5, verb: 0.4 }),
+  growth: (T, N, k) => { for (let i = 0; i < 6; i++) T({ f: (330 + i * 90) * k, f2: (380 + i * 110) * k, type: 'triangle', dur: 0.18, vol: 0.07, delay: i * 0.08 }); N({ dur: 0.5, vol: 0.05, f: 2500 * k, q: 1, delay: 0.1 }); },
+  snow: (T, N, k) => { for (let i = 0; i < 10; i++) T({ f: (2000 + Math.random() * 1600) * k, type: 'sine', dur: 0.3, vol: 0.03, delay: i * 0.12, verb: 0.9 }); N({ dur: 1.8, vol: 0.05, filter: 'lowpass', f: 600 * k, verb: 0.4 }); },
+  sun: (T, N, k) => { T({ f: 261 * k, f2: 523 * k, type: 'sine', dur: 1.6, vol: 0.1, attack: 0.5, verb: 0.8 }); T({ f: 392 * k, f2: 784 * k, type: 'triangle', dur: 1.6, vol: 0.06, attack: 0.6, verb: 0.8 }); },
+  frost: (T, N, k) => { for (let i = 0; i < 6; i++) T({ f: (3000 - i * 250) * k, type: 'square', dur: 0.08, vol: 0.03, delay: i * 0.05 }); N({ dur: 0.8, vol: 0.08, filter: 'highpass', f: 4000 * k, q: 0.7 }); },
+  drip: (T, N, k) => { for (let i = 0; i < 7; i++) T({ f: (900 + Math.random() * 500) * k, f2: 2000 * k, type: 'sine', dur: 0.06, vol: 0.07, delay: i * 0.2 + Math.random() * 0.1 }); N({ dur: 1.2, vol: 0.05, f: 800 * k, filter: 'lowpass' }); },
+  zap: (T, N, k) => { T({ f: 120 * k, f2: 2400 * k, type: 'sawtooth', dur: 0.25, vol: 0.08 }); N({ dur: 0.4, vol: 0.12, filter: 'highpass', f: 3000 * k }); T({ f: 60 * k, type: 'square', dur: 0.9, vol: 0.04, attack: 0.2, delay: 0.2 }); },
+  coins: (T, N, k) => { for (let i = 0; i < 9; i++) T({ f: (1800 + (i % 3) * 400) * k, type: 'square', dur: 0.06, vol: 0.04, delay: i * 0.07 }); },
+  splash: (T, N, k) => { N({ dur: 0.6, vol: 0.18, filter: 'lowpass', f: 1400 * k, f2: 300 }); T({ f: 300 * k, f2: 900 * k, type: 'sine', dur: 0.2, vol: 0.08, delay: 0.1 }); },
+  quake: (T, N, k) => { N({ dur: 2.2, vol: 0.45, filter: 'lowpass', f: 140 * k, f2: 50, q: 0.6 }); T({ f: 50 * k, f2: 30, type: 'sawtooth', dur: 1.6, vol: 0.2 }); },
+  bubbles: (T, N, k) => { for (let i = 0; i < 10; i++) T({ f: (220 + Math.random() * 300) * k, f2: (600 + Math.random() * 400) * k, type: 'sine', dur: 0.1, vol: 0.06, delay: i * 0.11 }); },
+  logs: (T, N, k) => { for (let i = 0; i < 4; i++) { T({ f: 160 * k, f2: 90, type: 'triangle', dur: 0.14, vol: 0.18, delay: i * 0.13 }); N({ dur: 0.08, vol: 0.12, f: 900 * k, q: 2, delay: i * 0.13 }); } },
+  stones: (T, N, k) => { for (let i = 0; i < 5; i++) { N({ dur: 0.07, vol: 0.18, f: 2400 * k, q: 3, delay: i * 0.1 }); T({ f: 220 * k, f2: 120, type: 'square', dur: 0.06, vol: 0.06, delay: i * 0.1 }); } },
+  heal: (T, N, k) => { arp(T, [1046, 1318, 1568, 2093].map((f) => f * k), { type: 'triangle', dur: 0.9, step: 0.1 }); T({ f: 523 * k, type: 'sine', dur: 1.2, vol: 0.06, attack: 0.3, verb: 0.8 }); },
+  calm: (T, N, k) => { T({ f: 392 * k, f2: 349 * k, type: 'sine', dur: 1.8, vol: 0.1, attack: 0.4, verb: 0.9 }); T({ f: 587 * k, type: 'sine', dur: 1.4, vol: 0.05, attack: 0.5, delay: 0.3, verb: 0.9 }); },
+  shield: (T, N, k) => { T({ f: 200 * k, f2: 600 * k, type: 'triangle', dur: 0.4, vol: 0.1 }); T({ f: 600 * k, type: 'sine', dur: 1.2, vol: 0.07, delay: 0.35, verb: 0.7 }); N({ dur: 0.3, vol: 0.06, filter: 'highpass', f: 5000, delay: 0.35 }); },
+  whoosh: (T, N, k) => N({ dur: 0.6, vol: 0.2, filter: 'bandpass', f: 600 * k, f2: 3000 * k, q: 2 }),
+  heartbeat: (T, N, k) => { for (let i = 0; i < 3; i++) { T({ f: 70 * k, f2: 50, type: 'sine', dur: 0.12, vol: 0.3, delay: i * 0.45 }); T({ f: 60 * k, f2: 45, type: 'sine', dur: 0.12, vol: 0.22, delay: i * 0.45 + 0.16 }); } },
+  lullaby: (T, N, k) => [[659, 0], [587, 0.35], [523, 0.7], [587, 1.05], [523, 1.4]].forEach(([f, d]) => T({ f: f * k, type: 'sine', dur: 0.5, vol: 0.08, delay: d, verb: 0.8 })),
+  love: (T, N, k) => { [[523, 0], [659, 0.12], [784, 0.24], [1046, 0.36]].forEach(([f, d]) => T({ f: f * k, type: 'triangle', dur: 0.35, vol: 0.08, delay: d, verb: 0.6 })); T({ f: 1318 * k, f2: 1568 * k, type: 'sine', dur: 0.8, vol: 0.05, delay: 0.5, verb: 0.8 }); },
+  feast: (T, N, k) => { arp(T, [523, 659, 784, 659, 1046].map((f) => f * k), { type: 'square', vol: 0.04, dur: 0.15, step: 0.1 }); N({ dur: 0.4, vol: 0.06, f: 1200 * k, q: 1, delay: 0.5 }); },
+  bark: (T, N, k) => { for (let i = 0; i < 2; i++) { T({ f: 500 * k, f2: 250 * k, type: 'sawtooth', dur: 0.09, vol: 0.1, delay: i * 0.22 }); N({ dur: 0.08, vol: 0.12, f: 900 * k, q: 2, delay: i * 0.22 }); } },
+  meow: (T, N, k) => T({ f: 700 * k, f2: 500 * k, type: 'triangle', dur: 0.45, vol: 0.1 }),
+  bleat: (T, N, k) => { for (let i = 0; i < 4; i++) T({ f: (420 + (i % 2) * 30) * k, type: 'sawtooth', dur: 0.09, vol: 0.06, delay: i * 0.09 }); },
+  moo: (T, N, k) => T({ f: 130 * k, f2: 95 * k, type: 'sawtooth', dur: 0.9, vol: 0.12, attack: 0.15 }),
+  oink: (T, N, k) => { for (let i = 0; i < 2; i++) { T({ f: 220 * k, f2: 160 * k, type: 'square', dur: 0.1, vol: 0.07, delay: i * 0.18 }); N({ dur: 0.1, vol: 0.1, f: 500 * k, q: 3, delay: i * 0.18 }); } },
+  cluck: (T, N, k) => { for (let i = 0; i < 5; i++) T({ f: (900 + Math.random() * 200) * k, f2: 600 * k, type: 'square', dur: 0.05, vol: 0.05, delay: i * 0.09 }); },
+  squeak: (T, N, k) => { for (let i = 0; i < 3; i++) T({ f: 2200 * k, f2: 2800 * k, type: 'sine', dur: 0.06, vol: 0.06, delay: i * 0.12 }); },
+  quack: (T, N, k) => { for (let i = 0; i < 3; i++) { T({ f: 480 * k, f2: 380 * k, type: 'sawtooth', dur: 0.1, vol: 0.07, delay: i * 0.2 }); N({ dur: 0.08, vol: 0.06, f: 1200 * k, q: 4, delay: i * 0.2 }); } },
+  neigh: (T, N, k) => { T({ f: 600 * k, f2: 900 * k, type: 'sawtooth', dur: 0.25, vol: 0.06 }); T({ f: 900 * k, f2: 500 * k, type: 'sawtooth', dur: 0.6, vol: 0.06, delay: 0.25 }); },
+  yip: (T, N, k) => { for (let i = 0; i < 3; i++) T({ f: 1100 * k, f2: 1600 * k, type: 'triangle', dur: 0.07, vol: 0.07, delay: i * 0.13 }); },
+  slime: (T, N, k) => { for (let i = 0; i < 3; i++) T({ f: 180 * k, f2: 420 * k, type: 'sine', dur: 0.18, vol: 0.12, delay: i * 0.2 }); N({ dur: 0.3, vol: 0.06, filter: 'lowpass', f: 600 * k }); },
+  wisp: (T, N, k) => { for (let i = 0; i < 6; i++) T({ f: (1568 + i * 196) * k, type: 'sine', dur: 0.6, vol: 0.035, delay: i * 0.09, verb: 0.9 }); },
+  horncall: (T, N, k) => { T({ f: 147 * k, type: 'sawtooth', dur: 1.1, vol: 0.1, attack: 0.15, verb: 0.6 }); T({ f: 220 * k, type: 'sawtooth', dur: 0.9, vol: 0.07, attack: 0.15, delay: 0.35, verb: 0.6 }); },
+  thump: (T, N, k) => { T({ f: 90 * k, f2: 45, type: 'sine', dur: 0.3, vol: 0.3 }); N({ dur: 0.15, vol: 0.12, filter: 'lowpass', f: 500 * k }); T({ f: 70 * k, f2: 40, type: 'sine', dur: 0.25, vol: 0.2, delay: 0.25 }); },
+  soft: (T, N, k) => { N({ dur: 0.9, vol: 0.08, filter: 'lowpass', f: 700 * k, f2: 300 }); T({ f: 784 * k, type: 'sine', dur: 0.8, vol: 0.05, delay: 0.2, verb: 0.8 }); },
+  drums: (T, N, k) => { for (let i = 0; i < 6; i++) { T({ f: (i % 2 ? 90 : 70) * k, f2: 40, type: 'sine', dur: 0.15, vol: 0.25, delay: i * 0.16 }); N({ dur: 0.05, vol: 0.06, filter: 'lowpass', f: 400, delay: i * 0.16 }); } },
+  thunder: (T, N, k) => { N({ dur: 0.15, vol: 0.4, filter: 'highpass', f: 2000 * k }); N({ dur: 2.2, vol: 0.35, filter: 'lowpass', f: 300 * k, f2: 50, q: 0.5, delay: 0.08, verb: 0.5 }); },
+  arrows: (T, N, k) => { for (let i = 0; i < 6; i++) N({ dur: 0.18, vol: 0.12, f: 2200 * k, f2: 800 * k, q: 6, delay: i * 0.09 }); N({ dur: 0.8, vol: 0.1, filter: 'lowpass', f: 900 * k, delay: 0.5 }); },
+  dark: (T, N, k) => { T({ f: 73 * k, type: 'sawtooth', dur: 1.8, vol: 0.08, attack: 0.3, verb: 0.8 }); T({ f: 77.8 * k, type: 'sawtooth', dur: 1.8, vol: 0.07, attack: 0.3, verb: 0.8 }); N({ dur: 1.5, vol: 0.05, filter: 'bandpass', f: 300 * k, q: 3 }); },
+  firestorm: (T, N, k) => { N({ dur: 1.6, vol: 0.3, filter: 'lowpass', f: 1500 * k, f2: 200 }); for (let i = 0; i < 8; i++) N({ dur: 0.04, vol: 0.1, f: 2600 * k, q: 5, delay: Math.random() * 1.3 }); },
+  heat: (T, N, k) => { N({ dur: 2, vol: 0.08, filter: 'bandpass', f: 250 * k, q: 4 }); T({ f: 110 * k, f2: 116 * k, type: 'sine', dur: 2, vol: 0.08, attack: 0.5 }); },
+  wither: (T, N, k) => { T({ f: 440 * k, f2: 110 * k, type: 'triangle', dur: 1.4, vol: 0.08 }); N({ dur: 1.2, vol: 0.06, filter: 'highpass', f: 3000 * k, f2: 800 }); },
+  buzz: (T, N, k) => { for (let i = 0; i < 4; i++) T({ f: (180 + i * 13) * k, type: 'sawtooth', dur: 1.6, vol: 0.03, attack: 0.3, delay: i * 0.05 }); },
+  plague: (T, N, k) => { T({ f: 98 * k, f2: 92 * k, type: 'square', dur: 1.6, vol: 0.05, attack: 0.3 }); for (let i = 0; i < 5; i++) T({ f: (200 + Math.random() * 100) * k, f2: 100, type: 'sine', dur: 0.2, vol: 0.05, delay: 0.2 + i * 0.22 }); },
+  wave: (T, N, k) => { N({ dur: 2.6, vol: 0.3, filter: 'lowpass', f: 600 * k, f2: 120, q: 0.5, verb: 0.4 }); N({ dur: 1.2, vol: 0.12, filter: 'highpass', f: 2000 * k, delay: 0.8 }); },
+  boom: (T, N, k) => { N({ dur: 1.8, vol: 0.6, filter: 'lowpass', f: 400 * k, f2: 40, q: 0.4, verb: 0.5 }); T({ f: 60 * k, f2: 25, type: 'sine', dur: 1.2, vol: 0.45 }); },
+};
 
 class AudioEngine {
   constructor() { this.ctx = null; this.bus = {}; this.vol = { master: 0.8, music: 0.45, ambient: 0.45, ui: 0.6, miracles: 0.6, world: 0.55 }; this.last = {}; this.musicOn = false; }
@@ -64,13 +129,10 @@ class AudioEngine {
       case 'chat': T({ f: 1046, type: 'sine', dur: 0.08, vol: 0.1 }); T({ f: 1568, type: 'sine', dur: 0.1, vol: 0.08, delay: 0.06 }); break;
       case 'glitter': for (let i = 0; i < 5; i++) T({ f: 1800 + Math.random() * 1600, type: 'sine', dur: 0.12, vol: 0.05, delay: i * 0.035, ch: 'miracles', verb: 0.5 }); break;
       // ---- miracles ----
-      case 'power': {
-        const p = opts.power;
-        [392, 523, 659, 784, 1046].forEach((f, i) => T({ f, type: 'sine', dur: 0.6, vol: 0.1, delay: i * 0.05, ch: 'miracles', verb: 0.7 }));
-        if (p === 'rain' || p === 'breeze') N({ dur: 1.4, vol: 0.07, ch: 'miracles', filter: 'lowpass', f: 500, f2: 1500, verb: 0.3 });
-        if (p === 'tectonic') { N({ dur: 1.6, vol: 0.5, ch: 'miracles', filter: 'lowpass', f: 120, f2: 60, q: 0.7 }); T({ f: 55, f2: 30, type: 'sawtooth', dur: 1.4, vol: 0.25, ch: 'miracles' }); }
-        if (p === 'heal' || p === 'cure' || p === 'calm') [1046, 1318, 1568].forEach((f, i) => T({ f, type: 'triangle', dur: 0.8, vol: 0.07, delay: 0.2 + i * 0.1, ch: 'miracles', verb: 0.8 }));
-        if (p === 'avatar' || p === 'prophecy' || p === 'orbshield') [261, 329, 392, 523].forEach((f) => T({ f, type: 'sawtooth', dur: 1.6, vol: 0.05, attack: 0.3, ch: 'miracles', verb: 0.9 }));
+      case 'power': { // every power has its own voice (data/powerfx.js -> POWER_SOUNDS below)
+        const pf = POWER_FX[opts.power] || { snd: 'chime', p: 1 };
+        const fn = POWER_SOUNDS[pf.snd] || POWER_SOUNDS.chime;
+        fn((o) => T({ ch: 'miracles', ...o }), (o) => N({ ch: 'miracles', ...o }), pf.p || 1);
         break;
       }
       // ---- world ----

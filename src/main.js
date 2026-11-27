@@ -254,7 +254,7 @@ class App {
   }
   async castSelf(P) {
     const r = await this.session.command({ type: 'power', power: P.id });
-    r.ok ? audio.play('power', { power: P.id }) : toast(r.msg, { sound: 'error' });
+    if (!r.ok) toast(r.msg, { sound: 'error' });
   }
   startPlacing(type) { this.tool = 'build'; this.buildType = type; setCursor('build'); this.updateModeChip(); }
   /** Move the person held by the divine hand so they dangle under the cursor (host applies; throttled for co-op). */
@@ -314,7 +314,7 @@ class App {
       case 'lightning': audio.play('thunder', { vol: Math.max(0.2, o.vol) * 0.7 }); break;
       case 'meteor': setTimeout(() => audio.play('boom', { vol: Math.max(0.4, o.vol) }), 800); break;
       case 'quake': case 'eruption': audio.play('quake', { vol: Math.max(0.4, o.vol) }); break;
-      case 'power': audio.play('power', { power: e.power }); break;
+      case 'power': if (!e.sub) audio.play('power', { power: e.power }); break;
       case 'glitter': if (o.vol > 0.3) audio.play('glitter', { vol: o.vol * 0.5 }); break;
       case 'launch': audio.play('launch', { vol: Math.max(0.3, o.vol) }); break;
       case 'emote': if (e.icon === 'baby') audio.play('birth', o); break;

@@ -117,6 +117,9 @@ export function stepAnimals(world, dt, rng, hotChunks) {
     // flee from people
     const near = pawnsNear(world, a.x, a.y, 4)[0];
     if (near && !A.predator && !A.friendly) { const d = Math.max(0.1, dist(a.x, a.y, near.x, near.y, W)); move(world, a, -dx(a.x, near.x, W) / d, -(near.y - a.y) / d, A.speed * dt); continue; }
+    // answering a divine call (Call of the Wild): amble toward the spot
+    if (a.lure && a.lure.until > world.time) { const ddx = dx(a.x, a.lure.x, W), ddy = a.lure.y - a.y, d = Math.hypot(ddx, ddy); if (d > 1.5) { move(world, a, ddx / d, ddy / d, A.speed * 0.5 * dt); continue; } }
+    else if (a.lure) a.lure = null;
     // graze & wander
     a.t -= dt;
     if (a.t <= 0) { a.t = rng.range(0.05, 0.25); const ang = rng.next() * Math.PI * 2; a.vx = rng.chance(0.4) ? 0 : Math.cos(ang); a.vy = rng.chance(0.4) ? 0 : Math.sin(ang); }

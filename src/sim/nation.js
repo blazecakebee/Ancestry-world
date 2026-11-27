@@ -90,6 +90,8 @@ function assignHomes(world, s, pawns) {
   s.housing = homes.reduce((a, b) => a + Math.floor(BUILDINGS[b.type].fn.housing * (1 + b.era * 0.15)), 0);
 }
 
+const ZONE_GROW = { rain: 2.2, clear: 1.9, beacon: 1.2, dry: -0.4, heat: -0.6 };
+const wrapDx = (a, b, W) => { let d = b - a; if (d > W / 2) d -= W; if (d < -W / 2) d += W; return d; };
 function growCrops(world, s, n, dt) {
   const t = world.tiles, W = world.W;
   const harvest = s.until.harvest > world.time;
@@ -99,13 +101,15 @@ function growCrops(world, s, n, dt) {
     const T = tempAt(world.atmo, t, ci);
     const indoor = n.era >= 8;
     const tf = indoor ? 1 : T < 0 ? -1 : T < 6 ? 0.3 : T > 38 ? 0.3 : 1;
+    // divine weather over the field: rain and sunshine speed it up, drought and heat wither it
+    let zm = 1; for (const z of world.atmo.zones || []) if (z.until > world.time && Math.hypot(wrapDx(z.x, b.x + 1, W), z.y - b.y - 1) < z.r + 1) zm *= ZONE_GROW[z.kind] ?? 1;
     for (let oy = 0; oy < b.h; oy++) for (let ox = 0; ox < b.w; ox++) {
       const i = (b.y + oy) * W + wrap(b.x + ox, W);
       if (t.feat[i] !== F.FARM || t.crop[i] === 0) continue;
       if (tf < 0) { if (Math.random() < dt * 0.6) { t.crop[i] = 0; world.dirty.add(i); } continue; } // frost kills
       const wet = t.water[i] > 0.6 ? -0.5 : 1; // drowned crops
       const fert = Math.max(0.15, BIOMES[t.biome[i]].fert) * (indoor ? 1.2 : 1);
-      const g = harvest ? 255 : dt * 60 * fert * tf * eco * wet * (1 + n.era * 0.08);
+      const g = harvest ? 255 : dt * 60 * fert * tf * eco * wet * (1 + n.era * 0.08) * (indoor ? 1 : zm);
       const v = clamp(t.crop[i] + g, 0, 255);
       if (Math.floor(v / 40) !== Math.floor(t.crop[i] / 40)) world.dirty.add(i);
       t.crop[i] = v;
