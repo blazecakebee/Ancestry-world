@@ -33,8 +33,15 @@ export function buildingPreview(type, era, nation, size = 96) {
     return c;
   }
   let src = mfSprite(mfName(type, era, 0), race), r = null;
-  if (!src && (type === 'hut' && era <= 1 || type === 'center' && era === 0)) { const t = GAN.sheetRect(type === 'center' ? 'large_tent' : 'small_tent'); if (t) src = t.im; }
-  if (!src && type === 'campfire') { const f = GAN.campfireFrame(0, false); if (f) { src = f.im; r = [f.x, f.y, 32, 32]; } }
+  if (!src && (type === 'hut' && era <= 1 || type === 'center' && era === 0 || type === 'healer' && era <= 2)) { const t = GAN.sheetRect(type === 'center' ? 'large_tent' : 'small_tent'); if (t) src = t.im; }
+  if (src && type === 'healer' && era <= 2) { // cross + medkit, like in the world
+    const k = Math.min((size - 6) / src.width, (size - 6) / src.height), w = src.width * k, hgt = src.height * k, x0 = (size - w) / 2, y0 = size - 3 - hgt;
+    x.drawImage(src, x0, y0, w, hgt); const cx = size / 2, cy = y0 + hgt * 0.45, cs = 3;
+    x.fillStyle = '#fff'; x.fillRect(cx - cs * 2.6, cy - cs * 2.6, cs * 5.2, cs * 5.2); x.fillStyle = '#d8282f'; x.fillRect(cx - cs * 0.8, cy - cs * 2.1, cs * 1.6, cs * 4.2); x.fillRect(cx - cs * 2.1, cy - cs * 0.8, cs * 4.2, cs * 1.6);
+    const mk = new Image(); mk.src = itemUrl('medicine'); mk.onload = () => x.drawImage(mk, size - 30, size - 28, 24, 24);
+    return c;
+  }
+  if (!src && (type === 'campfire' || (type === 'research' && era === 0))) { const f = GAN.campfireFrame(0, false); if (f) { src = f.im; r = [f.x, f.y, 32, 32]; } }
   if (!src) { src = buildingSprite(type, era, def.w, def.h, nation?.color || '#e8c547', 0); r = trim(src); }
   const [sx0, sy0, sw, sh] = r || [0, 0, src.width, src.height];
   const k = Math.min((size - 6) / sw, (size - 6) / sh);
@@ -159,12 +166,20 @@ import { dateString } from '../sim/world.js';
 
 export const ribbon = (text, cls = '') => h('div', { class: `ribbon ${cls}` }, h('i', { class: 'rb-l' }), h('span', { class: 'rb-m' }, text), h('i', { class: 'rb-r' }));
 /** Two-page spread: bookmarks across the top, the civilization on the left page, the chosen chapter on the right. */
-export function bookSpread(tabList, tab, pick, left, title, right) {
+const BOOK = { tab: null, t: 0, opened: 0 };
+/** Paper "appear" animation (Humble Gift): a sheet of blank paper over the page dissolves to reveal the writing. */
+const appear = (since) => { const el = since < 1300 ? h('div', { class: 'appear', style: { animationDelay: `-${Math.round(since)}ms` } }) : null; return el; };
+export function bookSpread(tabList, tab, pick, left, title, right, openedAt = 0) {
+  const now = performance.now();
+  if (openedAt && openedAt !== BOOK.opened) { BOOK.opened = openedAt; BOOK.t = now; BOOK.tab = tab; BOOK.both = true; }
+  if (tab !== BOOK.tab) { BOOK.tab = tab; BOOK.t = now; BOOK.both = false; }
+  const since = now - BOOK.t;
   return h('div', { class: 'book' },
-    h('div', { class: 'book-marks' }, tabList.map(([id, label, ic]) => h('button', { class: `mark ${id === tab ? 'on' : ''}`, onclick: () => pick(id), tip: label }, iconImg(ic, 2, 'px-icon sm'), h('span', {}, label)))),
     h('div', { class: 'book-spread' },
-      h('div', { class: 'page page-l' }, left),
-      h('div', { class: 'page page-r' }, ribbon(title, 'sm'), right)));
+      h('div', { class: 'page page-l' }, h('div', { class: 'page-in' }, left), BOOK.both ? appear(since) : null),
+      h('div', { class: 'page page-r' },
+        h('div', { class: 'book-marks' }, tabList.map(([id, label, ic]) => h('button', { class: `mark ${id === tab ? 'on' : ''}`, onclick: () => pick(id), tip: label }, iconImg(ic, 2, 'px-icon sm'), h('span', {}, label)))),
+        h('div', { class: 'page-in' }, ribbon(title, 'sm'), right), appear(since))));
 }
 /** Left page: who these people are, at a glance. */
 export function civPage(hud, w, n, pawns, leader, owner, mine) {

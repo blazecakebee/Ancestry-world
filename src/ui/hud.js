@@ -116,7 +116,7 @@ export class HUD {
       h('div', { class: 'tool-list' },
         tool('inspect', 'inspect', 'Inspect', 'Q', 'Inspect <span class="kbd">Q</span><br>Click citizens, buildings & settlements', () => app.setTool('inspect')),
         tool('build', 'plan', 'Plan', 'B', 'Plan a building <span class="kbd">B</span><br>Your people will build it', () => this.openBuildMenu()),
-        tool('possess', 'possess', 'Possess', 'F', 'Possess a citizen<br>Select one of your people, then take control (WASD to move, F to act, R to release)', () => app.possessSelected()),
+        tool('order', 'sword', 'Orders', 'Y', 'Give orders <span class="kbd">Y</span><br>Point at something and your people deal with it: fight, chop, mine, hunt, deconstruct or destroy. (Possess a citizen from their window.)', () => app.setTool(app.tool === 'order' ? 'inspect' : 'order')),
         tool('overlay', 'map', 'Layers', 'F1', 'Map overlays <span class="kbd">F1–F10</span>', () => this.toggleOverlayMenu()),
         h('div', { class: 'sep' }),
         tool('research', 'research', 'Research', 'T', 'Research tree <span class="kbd">T</span><br>Choose what your scholars study', () => this.me && this.openNation(this.me.id, 'research')),
@@ -131,11 +131,12 @@ export class HUD {
     this.powerBar = h('div', { class: 'glass powerbar' });
     this.modeChip = h('div', { class: 'glass mode-chip hidden' });
     this.possessBar = h('div', { class: 'glass possess-bar hidden' });
+    this.orderBar = h('div', { class: 'glass possess-bar order-bar hidden' });
     // Focus: appears once you zoom out or drift away; flies the camera back to your capital
     this.focusBtn = h('button', { class: 'btn primary focus-btn hidden', tip: 'Back to your settlement <span class="kbd">H</span>', onclick: () => this.focusHome() }, iconImg('house', 2, 'px-icon sm'), 'Focus');
     this.root.append(this.focusBtn);
     this.stores = new StoresPanel(this); this.root.append(this.stores.el);
-    this.root.append(h('div', { class: 'hud-bottom' }, this.powerBar), this.possessBar, this.modeChip);
+    this.root.append(h('div', { class: 'hud-bottom' }, this.powerBar), this.possessBar, this.orderBar, this.modeChip);
     this.buildPowers();
     // ---- right: players + notifications ----
     this.playersEl = h('div', { class: 'glass players' });
@@ -187,6 +188,17 @@ export class HUD {
     this.tierShown = tier;
   }
 
+  /** Orders bar: pick what clicking in the world asks your people to do. */
+  setOrderBar(on, kind, pick) {
+    const bar = this.orderBar; if (!bar) return;
+    bar.classList.toggle('hidden', !on);
+    const key = on ? kind : '';
+    if (!on || bar._mode === key) { if (!on) bar._mode = null; return; }
+    bar._mode = key;
+    const A = [['fight', 'sword', 'Fight', 'Send up to four people to attack an enemy at war with you, a raider or a beast.'], ['chop', 'wood', 'Chop', 'Fell that tree.'], ['mine', 'stone', 'Mine', 'Break that rock or ore.'],
+      ['hunt', 'food', 'Hunt', 'Hunt that animal and butcher it.'], ['deconstruct', 'hammer', 'Deconstruct', 'Take one of your buildings apart; half its materials come back.'], ['destroy', 'warning', 'Destroy', 'Wreck one of your buildings, or an enemy building if you are at war.']];
+    bar.replaceChildren(...A.map(([id, icon, label, tip], k) => h('button', { class: `pact ${id === kind ? 'on' : ''}`, onclick: () => pick(id), tip: `<b>${label}</b> <span class="muted">· key ${k + 1}</span><br>${tip}` }, iconImg(icon, 2, 'px-icon sm'), h('span', {}, label), h('i', { class: 'k' }, String(k + 1)))));
+  }
   /** Action bar shown while possessing someone: pick what F / clicking does. */
   setPossessBar(on, mode, pick) {
     const bar = this.possessBar; if (!bar) return;
@@ -458,7 +470,8 @@ export class HUD {
 
   openNation(id, startTab) {
     let tab = startTab || 'overview';
-    const app = this.app;
+    const app = this.app, openedAt = performance.now();
+    const bw = Math.min(1120, innerWidth - 16), bh = Math.min(Math.round(bw * 560 / 768) + 44, innerHeight - 16); // the book desk art's proportions
     const win = openWindow('nation', 'Nation', (body, win) => {
       const w = this.w, n = w.nations[id];
       if (!n) return h('p', {}, 'Gone.');
@@ -501,9 +514,10 @@ export class HUD {
       const tabList = [['overview', 'Chronicle', 'scroll'], ['research', 'Research', 'research'], ['will', mine ? 'Creed & Will' : 'Creed', 'dove'], ['diplo', 'Diplomacy', 'users']];
       if (mine && app.session.mode !== 'single') tabList.push(['perms', 'Permissions', 'lock']);
       if (tab === 'overview') add(content, chroniclePage(w, n, pawns));
-      return bookSpread(tabList, tab, (t) => { tab = t; win.update(); }, civPage(this, w, n, pawns, leader, owner, mine), tabList.find((t) => t[0] === tab)?.[1] || '', content);
-    }, { x: Math.max(10, innerWidth / 2 - 520), y: 56, w: 1040, h: Math.min(760, innerHeight - 80), icon: iconImg('flag') });
+      return bookSpread(tabList, tab, (t) => { tab = t; win.update(); }, civPage(this, w, n, pawns, leader, owner, mine), tabList.find((t) => t[0] === tab)?.[1] || '', content, openedAt);
+    }, { x: Math.max(8, innerWidth / 2 - bw / 2), y: Math.max(8, (innerHeight - bh) / 2), w: bw, h: bh, icon: iconImg('flag') });
     win.el.classList.add('book-win');
+    { let k = 0; const iv = setInterval(() => { win.update(); if (++k > 14) clearInterval(iv); }, 90); } // drive the page-appear animation
   }
 
   openSpace() {

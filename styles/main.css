@@ -445,20 +445,25 @@ p.warn { color: var(--bad); font-weight: 600; }
 .tech-txt { display: flex; flex-direction: column; min-width: 0; } .tech-name { font-size: .86em; font-weight: 600; line-height: 1.15; }
 
 /* ---- Civilization Book (Humble Gift Paper UI) ---- */
-.win.book-win { background: #5a3a2c url(../assets/packs/paper/desk.png) center / cover no-repeat; border: 3px solid #3c2519; box-shadow: 0 22px 60px rgba(20,8,0,.55); image-rendering: pixelated; }
-.win.book-win .titlebar { background: rgba(40,22,14,.55); border-bottom: 2px solid #3c2519; color: #f6e7c6; }
-.win.book-win .body { padding: 10px 16px 16px; }
-.book { display: flex; flex-direction: column; gap: 4px; height: 100%; }
-.book-marks { display: flex; gap: 6px; padding: 0 18px; justify-content: flex-end; }
-.mark { width: 92px; height: 58px; padding: 6px 4px 14px; border: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px;
-  background: url(../assets/packs/paper/ban11.png) bottom / 100% 34px no-repeat, url(../assets/packs/paper/ban9.png) top / 100% 30px no-repeat; image-rendering: pixelated;
-  color: #4a3420; font-size: 11px; font-weight: 700; transform: translateY(-6px); transition: transform .12s; filter: saturate(.85) brightness(.92); }
-.mark:hover { transform: translateY(-2px); }
-.mark.on { transform: translateY(2px); filter: none; }
-.book-spread { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; flex: 1; min-height: 0; }
+.win.book-win { background: #5a3a2c url(../assets/packs/paper/desk.png) center / 100% 100% no-repeat; border: 3px solid #3c2519; box-shadow: 0 22px 60px rgba(20,8,0,.55); image-rendering: pixelated; }
+.win.book-win .titlebar { background: transparent; border-bottom: 0; color: #f6e7c6; text-shadow: 0 2px 0 rgba(30,14,6,.7); position: relative; z-index: 3; }
+.win.book-win .body { padding: 0; overflow: hidden; }
+.book { height: 100%; padding: 4.2% 5.2% 7.6% 5.2%; box-sizing: border-box; }
+.book-spread { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 3%; height: 100%; min-height: 0; }
 .page { --text: #3a2a18; --muted: #7a6446; --panel-2: rgba(110, 76, 40, 0.08); --border: rgba(110, 76, 40, 0.32); --accent: #a5481f; --accent-ink: #fff4dc; --good: #2f7a4a; --bad: #b0382a;
-  color: var(--text); border: 36px solid transparent; border-image: url(../assets/packs/paper/page.png) 56 fill / 36px stretch; image-rendering: pixelated;
-  padding: 0 6px; overflow: auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+  position: relative; color: var(--text); border: 34px solid transparent; border-image: url(../assets/packs/paper/page.png) 56 fill / 34px stretch; image-rendering: pixelated;
+  display: flex; flex-direction: column; min-height: 0; }
+.page { min-width: 0; } .page .tech-tree { max-width: 100%; overflow-x: auto; }
+.page-l { transform: rotate(-0.6deg); } .page-r { transform: rotate(0.5deg); margin-top: 22px; }
+.page-in { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 0 6px 4px; scrollbar-width: thin; scrollbar-color: rgba(110,76,40,.45) transparent; }
+.appear { position: absolute; inset: -12px; pointer-events: none; z-index: 5; background: url(../assets/packs/paper/appear.png) 0 0 / 3600% 100% no-repeat; image-rendering: pixelated; animation: paper-appear 1.15s steps(35) forwards; }
+@keyframes paper-appear { to { background-position: 100% 0; } }
+.book-marks { position: absolute; top: -78px; right: -6px; display: flex; gap: 4px; z-index: 4; }
+.mark { width: 86px; height: 56px; padding: 6px 4px 14px; border: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px;
+  background: url(../assets/packs/paper/ban11.png) bottom / 100% 32px no-repeat, url(../assets/packs/paper/ban9.png) top / 100% 30px no-repeat; image-rendering: pixelated;
+  color: #4a3420; font-size: 11px; font-weight: 700; transform: translateY(0); transition: transform .14s; filter: saturate(.85) brightness(.9); }
+.mark:hover { transform: translateY(4px); }
+.mark.on { transform: translateY(12px); filter: none; }
 .page .card, .page .chip { background: rgba(110, 76, 40, 0.08); border-color: rgba(110, 76, 40, 0.3); color: var(--text); }
 .page .btn { background: rgba(110, 76, 40, 0.12); color: var(--text); border-color: rgba(110, 76, 40, 0.35); }
 .page .btn.primary { background: #2f6b54; color: #fff4dc; }
@@ -466,13 +471,12 @@ p.warn { color: var(--bad); font-weight: 600; }
 .page .bar { background: rgba(110, 76, 40, 0.18); } .page .bar i { background: linear-gradient(90deg, #2f6b54, #3f9a72); }
 .page select, .page input { color: #3a2a18; background: #f6ecd2; border-color: rgba(110, 76, 40, 0.4); }
 .page .tech { background: rgba(255, 250, 235, 0.55); } .page .tech.known { background: rgba(63, 154, 114, 0.18); border-color: rgba(47, 107, 84, .5); }
-.page .tech-tree { max-width: 100%; }
-.ribbon { display: flex; align-items: stretch; height: 44px; margin: -6px auto 2px; max-width: 100%; image-rendering: pixelated; }
+.page .tech-col { min-width: 140px; }
+.ribbon { display: flex; align-items: stretch; height: 44px; margin: -4px auto 2px; max-width: 100%; image-rendering: pixelated; flex: none; }
 .ribbon .rb-l { width: 60px; flex: none; background: url(../assets/packs/paper/ban6.png) center / 100% 100% no-repeat; }
 .ribbon .rb-r { width: 60px; flex: none; background: url(../assets/packs/paper/ban8.png) center / 100% 100% no-repeat; }
 .ribbon .rb-m { background: url(../assets/packs/paper/ban7.png) center / auto 100% repeat-x; display: flex; align-items: center; justify-content: center; padding: 0 10px 4px; margin: 0 -30px; z-index: 1;
   font-weight: 800; color: #3a2a18; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 80px; }
-.ribbon .rb-l { z-index: 0; } .ribbon .rb-r { z-index: 0; }
 .ribbon.sm { height: 36px; } .ribbon.sm .rb-m { font-size: 14px; } .ribbon.sm .rb-l, .ribbon.sm .rb-r { width: 48px; }
 .book-flag { width: 72px; height: 48px; image-rendering: pixelated; border: 2px solid #6b4a2c; border-radius: 4px; flex: none; }
 .civ-head { gap: 12px; align-items: center; }
@@ -493,3 +497,6 @@ p.warn { color: var(--bad); font-weight: 600; }
 .book-modal .cx-sub { color: #8a3a16; }
 .book-modal .cx-f { color: #5a4630; border-color: rgba(110, 76, 40, .35); } .book-modal .cx-f.on { background: rgba(110, 76, 40, .15); color: #3a2a18; border-color: #8a3a16; }
 .book-modal .cx-quotes blockquote { background: rgba(255, 250, 235, 0.5); border-color: #8a3a16; }
+.order-bar { bottom: 168px; }
+.order-bar .pact.on { outline: 2px solid var(--accent, #e7c46a); }
+.order-bar:not(.hidden) ~ .mode-chip { bottom: 232px; }

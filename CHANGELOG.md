@@ -2,6 +2,15 @@
 
 Also available in-game: **Main menu → What's New**.
 
+## v0.7.1 — Orders, the divine hand and living characters (2026-11-27)
+
+- **New:** Orders replace the Possess button on the left (key Y): pick Fight, Chop, Mine, Hunt, Deconstruct or Destroy and click a target, and your best-suited people go and do it. Chopping and mining work through the whole grove or vein around the spot, carrying loads home between trips. Deconstructing returns half the materials; you can only destroy enemy buildings when at war. Possessing still works from a citizen's window or the F key.
+- **New:** The divine hand: press and hold on a person to pick them up. They kick in the air while you carry them; let go gently to set them down, or flick the mouse to throw them (hard throws hurt). You can lift your own people and those of computer nations, never another player's without permission. Works in co-op.
+- **New:** The new character models got their full animation set: running when fleeing or charging, jumping for joy when a building is finished or a new era begins, kicking while held, a proper collapse when someone dies, and a lying pose for the sleeping, downed and dead.
+- **Fixed:** Knocked-over and killed people no longer turn back into the old sprites while they tumble: the ragdoll now uses the new character art.
+- **Fixed:** Half-zoomed-out views no longer show hard cut edges at the poles or overlapping map layers while blending into the globe.
+- **Fixed:** Windows now open in free space and never cover the Stores list, the toolbar, the power bar or each other.
+
 ## v0.7.0 — Items, professions, a research tree and towns that grow up (2026-11-27)
 
 - **New:** Everything drops real goods: trees give logs, rocks give stone, ore gives copper, iron or gold, bushes give berries, apples or bananas by biome, fields grow climate-suited crops (wheat, carrots, corn, tomatoes, cotton and more), cows give red meat and hides, sheep give wool, chickens give poultry and eggs, fish come in two kinds. Cooks turn them into bread, roasts, pastries, meals or rations.
@@ -25,6 +34,9 @@ Also available in-game: **Main menu → What's New**.
 - **Fixed:** Chickens no longer flicker or show stray text: the broken rooster sheets were removed.
 - **Fixed:** Flags no longer flicker in menus (the same flag picture was being moved between windows).
 - **Fixed:** Stray pumpkins no longer appear in the grass.
+- **Improved:** The Civilization Book now uses the paper pack's own animation: pages appear as a blank sheet dissolves into writing when you open it or turn to a new chapter, the pages sit inside the book desk, and the bookmarks hang from the right page.
+- **Fixed:** Early huts now always use the hide-tent art (they fell back to the procedural tent), including while being built.
+- **Improved:** The Elder Fire is the campfire burning tall, and the Healer's Tent is the hide tent with a red cross and a medkit.
 
 ## v0.6.0 — Creeds, bigger worlds, 31 new powers and a new Codex (2026-11-27)
 

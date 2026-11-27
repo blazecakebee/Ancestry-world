@@ -40,7 +40,7 @@ const PICK = {
   coop: [null, 'coop', 'coop', 'henhouse', 'coop', 'henhouse', 'me:greenhouse', 'me:greenhouse', 'me:greenhouse', 'me:greenhouse'],
   tavern: [null, null, 'house1', 'house1', 'house1', 'house2', 'me:coffee', 'me:hotel', 'me:mushroom', 'me:mushroom'],
   barracks: [null, null, 'me:tent_mil', 'me:tent_mil', 'stable', 'stable', 'me:dorm', 'me:police', 'me:bunker', 'me:bunker'],
-  healer: [null, 'canopy_small', 'canopy_small', null, null, null, 'me:hospital', 'me:hospital', 'me:hospital', 'me:hospital'],
+  healer: [null, null, null, null, null, null, 'me:hospital', 'me:hospital', 'me:hospital', 'me:hospital'],
   temple: ['me:statue_brown', 'me:statue_brown', 'me:statue_grey', 'me:statue_grey', 'me:statue_angel', 'me:chapel', 'me:chapel', 'me:fountain3', 'me:fountain3', 'me:fountain3'],
   research: [null, null, null, null, null, 'me:school', 'me:school', 'me:school', 'me:radiotower', 'me:radiotower'],
   factory: [null, null, null, null, null, null, 'me:powerhouse', 'me:powerhouse', 'me:powerhouse', 'me:powerhouse'],

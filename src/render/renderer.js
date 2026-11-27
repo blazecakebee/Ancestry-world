@@ -8,7 +8,7 @@ import { pawnSheet, FW, FH } from './pawnart.js';
 import { PACK, packSheet, PW, PH, DIR } from './charpack.js';
 import { Ragdoll } from './ragdoll.js';
 import { LPC, lpcSheet, LW, LH, LROW, LPC_BAND } from './lpc.js';
-import { GCH, gcharSheet, loadGChar, GW, GH, GFOOT, GTOP, GROW } from './gchar.js';
+import { GCH, gcharSheet, loadGChar, GW, GH, GFOOT, GTOP, GROW, GBAND } from './gchar.js';
 import * as GAN from './gandalf.js';
 import { loadFarm, farmFrame, cropFrame } from './farm.js';
 // which Modern Farm crop (row in crops.png) a field draws: staples common, exotics rare
@@ -352,10 +352,11 @@ export class Renderer {
     if (this.menuMode) { this.drawSpace(ctx); return; }
     const TB = ZOOM.GLOBE * 3.4, ga = this.menuMode ? 1 : c.zoom >= TB ? 0 : c.zoom <= ZOOM.GLOBE * 1.25 ? 1 : (() => { const u = (TB - c.zoom) / (TB - ZOOM.GLOBE * 1.25); return u * u * (3 - 2 * u); })();
     if (mode === 'surface') this.drawSurface(ctx, adt, local);
-    else if (mode === 'regional') this.drawRegional(ctx, 1);
+    else if (mode === 'regional' && ga > 0) { // regional -> globe: cross-fade the flat map into the sphere (no planets or halo drawn over the map)
+      this.drawSpace(ctx, false, ga);
+      ctx.globalAlpha = 1 - ga; this.drawRegional(ctx, 1); ctx.globalAlpha = 1;
+    } else if (mode === 'regional') this.drawRegional(ctx, 1);
     else this.drawSpace(ctx, false, 1);
-    // regional -> globe: the flat map bends into the sphere (same px-per-tile at the centre, then the sphere swells to its final size)
-    if (mode === 'regional' && ga > 0) this.drawSpace(ctx, false, ga);
     if (c.zoom < ZOOM.SURFACE * 1.3 && c.zoom >= ZOOM.SURFACE) { ctx.globalAlpha = 1 - (c.zoom - ZOOM.SURFACE) / (ZOOM.SURFACE * 0.3); this.drawRegional(ctx, 1, true); ctx.globalAlpha = 1; }
     if (this.fx.flash > 0) { ctx.fillStyle = `rgba(255,255,240,${this.fx.flash * ((this.settings.flash ?? 100) / 100) * 0.4})`; ctx.fillRect(-20, -20, this.W + 40, this.H + 40); }
     // evict old chunks
@@ -366,8 +367,12 @@ export class Renderer {
     this.onFxHook?.(e);
     if ((e.type === 'death' || e.type === 'knock') && e.pid) {
       const p = this.world.pawns[e.pid]; if (!p) return;
+      if (e.type === 'death' && !this.ragdolls.get(p.id) && this.sheetFor(p)?.g) { p._dieAt = this.time; return; } // play the death animation
       this.startRagdoll(p, e.ix || 0, e.iy || 0, e.type === 'death');
       return;
+    }
+    if (e.type === 'built' || e.type === 'era' || e.type === 'founded') { // nearby citizens jump for joy
+      for (const p of Object.values(this.world.pawns)) if (!p.dead && !p.downed && (e.type === 'era' ? p.nationId === e.nationId : Math.abs(p.x - e.x) < 4 && Math.abs(p.y - e.y) < 4)) p._cheer = this.time + 1 + (p.id % 5) * 0.12;
     }
     if (e.type === 'era') { const n = this.world.nations[e.nationId]; e.label = `${n ? n.name : ''} — ${['Stone Age', 'Neolithic', 'Bronze Age', 'Iron Age', 'Medieval', 'Renaissance', 'Industrial', 'Atomic', 'Ultra-Tech', 'Offworld'][e.era]}`; }
     this.fx.handle(e, this.settings);
@@ -376,7 +381,8 @@ export class Renderer {
     const sh = this.sheetFor(p); if (!sh) return;
     const facing = p.facing || 1;
     let rd;
-    if (sh.lpc) rd = new Ragdoll(sh.sheet, 0, (LROW.walk + DIR.FRONT) * LH, LW, LH, LPC_BAND, ix * 60, iy * 60 + 120, { dead, flip: 1 });
+    if (sh.g) rd = new Ragdoll(sh.sheet, 0, GROW.flail * GH, GW, GH, GBAND, ix * 60, iy * 60 + 120, { dead, flip: p._gFlip ? -1 : 1 });
+    else if (sh.lpc) rd = new Ragdoll(sh.sheet, 0, (LROW.walk + DIR.FRONT) * LH, LW, LH, LPC_BAND, ix * 60, iy * 60 + 120, { dead, flip: 1 });
     else if (sh.pack) { const ch = sh.ch, h = ch.bottom - ch.top; rd = new Ragdoll(sh.sheet, 0, DIR.FRONT * PH, PW, PH, { top: ch.top, headEnd: ch.top + Math.round(h * 0.4), hipY: ch.top + Math.round(h * 0.7), bottom: ch.bottom, cx: ch.cx }, ix * 60, iy * 60 + 120, { dead, flip: 1 }); }
     else rd = new Ragdoll(sh.sheet, 0, 0, FW, FH, { top: 6, headEnd: 21, hipY: 33, bottom: 47, cx: 16 }, ix * 60, iy * 60 + 120, { dead, flip: facing });
     this.ragdolls.set(p.id, rd);
@@ -478,7 +484,7 @@ export class Renderer {
       const ddx = wdx(p.rx, p.x, W), ddy = p.y - p.ry;
       p.rx = wrap(p.rx + ddx * k, W); p.ry += ddy * k;
       if (Math.abs(ddx) + Math.abs(ddy) > 0.003) { p._dir = Math.abs(ddx) > Math.abs(ddy) * 0.8 ? (ddx < 0 ? DIR.LEFT : DIR.RIGHT) : (ddy < 0 ? DIR.BACK : DIR.FRONT); p._moving = this.time; }
-      if (inView(p.rx, p.ry)) list.push({ y: p.ry, k: 3, p });
+      if (inView(p.rx, p.ry)) list.push({ y: p.heldBy && !p.dead ? p.ry + 6 : p.ry, k: 3, p });
     }
     this._autumn = dateString(w.time).season === 'Autumn';
     list.sort((A, Bv) => A.y - Bv.y);
@@ -554,12 +560,15 @@ export class Renderer {
     const w = this.world, set = w.settlements[b.sid], n = set ? w.nations[set.nationId] : null;
     const era = b.era ?? n?.era ?? 0;
     const mfn = mfName(b.type, era, b.id), mf = mfSprite(mfn, n?.race || 'human'), nf = MF_FRAMES[mfn] || 1;
-    const img = mf || buildingSprite(b.type, era, b.w, b.h, n?.color || '#cccccc', b.id);
+    // early tents come from the Gandalf pack (also while they are being raised)
+    const tent = !mf && !b.built && GAN.GA.ready && ((b.type === 'hut' && era <= 1) || (b.type === 'center' && era === 0) || (b.type === 'healer' && era <= 2)) ? GAN.sheetRect(b.type === 'center' || (b.type === 'hut' && b.id % 3 === 0) ? 'large_tent' : 'small_tent')?.im : null;
+    const img = mf || tent || buildingSprite(b.type, era, b.w, b.h, n?.color || '#cccccc', b.id);
     const fwid = mf ? mf.width / nf : img.width, fr = nf > 1 ? Math.floor(this.time * 6 + b.id) % nf : 0;
     let [sx, sy] = this.worldToScreen(b.x, b.y + b.h);
     const BS = 1.55, W0 = b.w * 32 * s;                       // buildings are drawn 55% larger than their footprint so they tower over citizens
     let Wd = W0 * BS, Hd = (b.h * 32 + ROOF_PAD) * s * BS;
     if (mf) { const fit = FIT_NAME[mfn] ?? MF_FIT[b.type] ?? 1; Wd = W0 * BS * fit; Hd = Wd * mf.height / fwid; }
+    else if (tent) { Wd = W0 * BS; Hd = Wd * tent.height / tent.width; }
     sx += (W0 - Wd) / 2;
     let own = false;
     if (!b.built) {
@@ -627,9 +636,23 @@ export class Renderer {
   }
   /** Tents and campfires from the Gandalf pack replace the procedural early-era buildings. Returns true when it drew the whole building. */
   drawGBuilding(ctx, b, sx, sy, Wd, s) {
-    if (!GAN.ready) return false;
+    if (!GAN.GA.ready) return false;
     const era = b.era ?? 0, cx = sx + Wd / 2;
     if (b.type === 'campfire') { const fr = GAN.campfireFrame(this.time + b.id, (b.id & 1) === 1); if (!fr) return false; const k = s * 2.1; ctx.drawImage(fr.im, fr.x, fr.y, 32, 32, cx - 16 * k, sy - 30 * k, 32 * k, 32 * k); return true; }
+    if (b.type === 'healer' && era <= 2) { // Healer's Tent: the hide hut's tent with a red cross and a medkit by the door
+      const t = GAN.sheetRect('small_tent'); if (!t) return false;
+      const k = Wd / t.w, h = t.h * k; ctx.drawImage(t.im, 0, 0, t.w, t.h, Math.round(cx - t.w * k / 2), Math.round(sy - h + 4 * s), t.w * k, h);
+      const cs = Math.max(2, 3.2 * s), cy2 = sy - h * 0.55; ctx.fillStyle = '#fff'; ctx.fillRect(cx - cs * 2.6, cy2 - cs * 2.6, cs * 5.2, cs * 5.2);
+      ctx.fillStyle = '#d8282f'; ctx.fillRect(cx - cs * 0.8, cy2 - cs * 2.1, cs * 1.6, cs * 4.2); ctx.fillRect(cx - cs * 2.1, cy2 - cs * 0.8, cs * 4.2, cs * 1.6);
+      const mk = itemImage('medicine'); if (mk) { const kk = s * 0.75; ctx.drawImage(mk, Math.round(cx + Wd * 0.28 - 16 * kk), Math.round(sy - 26 * kk), 32 * kk, 32 * kk); }
+      return true;
+    }
+    if (b.type === 'research' && era === 0) { // Elder Fire: the campfire, burning tall, with storytellers' logs around it
+      const fr = GAN.campfireFrame(this.time + b.id, false); if (!fr) return false; const k = s * 2.7;
+      ctx.drawImage(fr.im, fr.x, fr.y, 32, 32, cx - 16 * k, sy - 30 * k, 32 * k, 32 * k);
+      this.drawFlame(ctx, cx, sy - 10 * s, s * 2.1);
+      return true;
+    }
     if ((b.type === 'hut' && era <= 1) || (b.type === 'center' && era === 0)) {
       const big = b.type === 'center' || b.id % 3 === 0, t = GAN.sheetRect(big ? 'large_tent' : 'small_tent'); if (!t) return false;
       const k = (Wd * (big ? 0.95 : 1.05)) / t.w; ctx.drawImage(t.im, 0, 0, t.w, t.h, Math.round(cx - t.w * k / 2), Math.round(sy - t.h * k + 4 * s), t.w * k, t.h * k);
@@ -640,7 +663,7 @@ export class Renderer {
   }
   drawProp(ctx, key, x, y, k) { const r = GAN.prop(key); if (!r) return; ctx.drawImage(r.im, r.x, r.y, r.w, r.h, Math.round(x - r.w * k / 2), Math.round(y - r.h * k), r.w * k, r.h * k); }
   drawBuildingProps(ctx, b, sx, sy, Wd, s) {
-    if (!GAN.ready) return;
+    if (!GAN.GA.ready) return;
     const era = b.era ?? 0, y = sy + 3 * s, K = s * 1.15;
     const set = { storage: [['decor:barrels2', 0.06], ['decor:crate_wide', 0.9]], market: [['decor:table_set', 0.04], ['decor:basket_apples', 0.92]], tavern: [['decor:barrel', 0.04], ['decor:stool', 0.9]],
       temple: [['decor:statue', -0.02], ['decor:statue', 1.02]], workshop: [['decor:logpile', 0.02], ['decor:stump_axe', 0.93]], healer: [['decor:basket', 0.05], ['decor:bottles', 0.9]],
@@ -739,13 +762,15 @@ export class Renderer {
   }
 
   drawPawn(ctx, p, s, dt) {
-    const w = this.world, [sx, sy] = this.worldToScreen(p.rx, p.ry);
+    const w = this.world; let [sx, sy] = this.worldToScreen(p.rx, p.ry);
     const rd = this.ragdolls.get(p.id);
     const sh = this.sheetFor(p);
     const scale = (p.age < 14 ? 0.55 + (p.age / 14) * 0.4 : 1) * (1 + (p.fx?.size || 0)) * (p.look?.height || 1);
     const S = s * scale * (sh0g(this, p) ? 1.2 : 1);
-    // shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(sx, sy, 7 * S, 2.5 * S, 0, 0, 7); ctx.fill();
+    const held = !!p.heldBy && !p.dead;
+    // shadow (shrinks while lifted off the ground)
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(sx, sy, (held ? 4 : 7) * S, (held ? 1.6 : 2.5) * S, 0, 0, 7); ctx.fill();
+    if (held) { this.ragdolls.delete(p.id); sy -= (16 + Math.sin(this.rtime * 3) * 2) * S; }
     if (!sh) return;
     if (rd) {
       if (!rd.step(dt)) this.ragdolls.delete(p.id);
@@ -765,9 +790,14 @@ export class Renderer {
     let fw, fh, sxF, syF, footY, topY;
     if (sh.g) {
       fw = GW; fh = GH; footY = GFOOT + 1; topY = GTOP;
-      if (lying) { sxF = 0; syF = GROW.down * GH; }
-      else if (f >= 6) { sxF = (Math.floor(at * 0.9) % 6) * GW; syF = GROW.attack * GH; }
+      const run = moving && (st === 'fight' || st === 'flee' || p.attackAnim > 0 || p.brk?.type === 'flee');
+      if (held) { sxF = (Math.floor(this.rtime * 9 + p.id) % 4) * GW; syF = GROW.flail * GH; }                  // kicking in the air
+      else if (p.dead && p._dieAt !== undefined && this.time - p._dieAt < 1.1) { sxF = Math.min(9, Math.floor((this.time - p._dieAt) * 9)) * GW; syF = GROW.death * GH; } // collapse
+      else if (lying) { sxF = 9 * GW; syF = GROW.death * GH; }
+      else if (f >= 6) { sxF = (Math.floor(at * (st === 'work' ? 0.7 : 0.9)) % 6) * GW; syF = GROW.attack * GH; }
+      else if (run) { sxF = (Math.floor(at * 1.9) % 8) * GW; syF = GROW.run * GH; }
       else if (f >= 2) { sxF = (Math.floor(at * 1.4) % 8) * GW; syF = GROW.walk * GH; }
+      else if (p._cheer > this.time) { sxF = (Math.floor(at * 1.1) % 4) * GW; syF = GROW.jump * GH; }
       else { sxF = (Math.floor(at / 4) % 5) * GW; syF = GROW.idle * GH; }
       if (p._dir === DIR.LEFT) p._gFlip = true; else if (p._dir === DIR.RIGHT) p._gFlip = false; else if (p._gFlip === undefined) p._gFlip = (p.facing || 1) < 0;
     } else if (sh.lpc) {
@@ -784,13 +814,14 @@ export class Renderer {
     ctx.save();
     ctx.translate(Math.round(sx), Math.round(sy));
     if (lying && !sh.lpc && !sh.g) { ctx.rotate(-Math.PI / 2); ctx.translate(-4 * S, -fw / 2 * S + 8 * S); }
+    if (sh.g && lying && syF === GROW.death * GH && sxF === 9 * GW) ctx.translate((p._gFlip ? -1 : 1) * 12 * S, 0); // the lying frame sits left of the cell centre
     if (sh.g ? p._gFlip : (!sh.pack && !sh.lpc && (p.facing || 1) < 0)) ctx.scale(-1, 1);
     if (p.possessedBy) { ctx.shadowColor = '#ffd34d'; ctx.shadowBlur = 8; }
     ctx.drawImage(sh.sheet, sxF, syF, fw, fh, -fw / 2 * S, -footY * S, fw * S, fh * S);
     ctx.restore();
     // indicators
     const headY = sy - (footY - topY) * S;
-    p._hb = lying ? [sx - 18 * S, sy - 14 * S, sx + 18 * S, sy + 3 * S, this.rtime] : [sx - 11 * S, headY - 2 * S, sx + 11 * S, sy + 3 * S, this.rtime]; // click box = drawn sprite
+    p._hb = held ? [sx - 11 * S, headY - 2 * S, sx + 11 * S, sy + 3 * S, this.rtime] : lying ? [sx - 18 * S, sy - 14 * S, sx + 18 * S, sy + 3 * S, this.rtime] : [sx - 11 * S, headY - 2 * S, sx + 11 * S, sy + 3 * S, this.rtime]; // click box = drawn sprite
     if (p.brk) { ctx.fillStyle = '#ff5a5a'; ctx.font = `bold ${Math.max(10, 10 * s)}px system-ui`; ctx.textAlign = 'center'; ctx.fillText('!', sx, headY - 4); }
     const pinned = this.pins.has(p.id), selected = this.selection?.type === 'pawn' && this.selection.id === p.id;
     if ((p.hp < 92 || p.blood < 0.95) && !p.dead && (st === 'fight' || p.downed || selected)) { const hpw = 18 * s; ctx.fillStyle = '#1a1420'; ctx.fillRect(sx - hpw / 2, headY - 6, hpw, 3); ctx.fillStyle = p.hp > 50 ? '#62c46a' : '#e8484d'; ctx.fillRect(sx - hpw / 2, headY - 6, hpw * clamp(p.hp / 100, 0, 1), 3); }
@@ -922,8 +953,19 @@ export class Renderer {
     const sx0 = this.W / 2 - this.viewX() * T, single = W * T <= this.W * 1.02 && T < ZOOM.SURFACE, ks = single ? [0] : [-1, 0, 1];
     for (const k of ks) {
       const sx = sx0 + k * W * T; if (sx > this.W || sx + W * T < 0) continue;
-      ctx.drawImage(this.mapCanvas, sx, sy0, W * T, w.H * T);
-      if (this.overlay !== 'weather' && this.overlay !== 'wind') ctx.drawImage(this.ownCanvas, sx, sy0, W * T, w.H * T);
+      const X = Math.floor(sx), Y = Math.floor(sy0), MW = Math.ceil(W * T) + 1, MH = Math.ceil(w.H * T); // whole pixels + 1px overlap: no seam between map copies
+      ctx.drawImage(this.mapCanvas, X, Y, MW, MH);
+      // past the poles: stretch the edge rows (ice) and fade them out, so the flat map never shows a hard cut against space
+      const mc = this.mapCanvas, top = Math.max(0, Y), bot = Math.min(this.H, Y + MH);
+      if (Y > 0) { ctx.drawImage(mc, 0, 0, mc.width, 1, X, 0, MW, Y + 1); }
+      if (Y + MH < this.H) { ctx.drawImage(mc, 0, mc.height - 1, mc.width, 1, X, Y + MH - 1, MW, this.H - (Y + MH) + 1); }
+      if (Y > 0 || Y + MH < this.H) {
+        ctx.save(); ctx.globalAlpha *= 0.55; ctx.fillStyle = '#0b0f1f';
+        if (Y > 0) { const g = ctx.createLinearGradient(0, Y, 0, 0); g.addColorStop(0, 'rgba(11,15,31,0)'); g.addColorStop(1, 'rgba(11,15,31,1)'); ctx.fillStyle = g; ctx.fillRect(X, 0, MW, top); }
+        if (Y + MH < this.H) { const g = ctx.createLinearGradient(0, bot, 0, this.H); g.addColorStop(0, 'rgba(11,15,31,0)'); g.addColorStop(1, 'rgba(11,15,31,1)'); ctx.fillStyle = g; ctx.fillRect(X, bot, MW, this.H - bot); }
+        ctx.restore();
+      }
+      if (this.overlay !== 'weather' && this.overlay !== 'wind') ctx.drawImage(this.ownCanvas, X, Y, MW, MH);
       this.drawMapOverlay(ctx, sx, sy0, T);
     }
     // clouds
