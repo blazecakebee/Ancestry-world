@@ -1,5 +1,6 @@
 // Melee & ranged combat for pawns and animals. Hits create body-part injuries; strong hits knock targets back (ragdoll fx).
 import { injure } from './health.js';
+import { swordDmg, wearTool } from './tools.js';
 import { eraOf } from '../data/eras.js';
 import { gainXp, addThought } from './pawn.js';
 import { emitFx } from './world.js';
@@ -48,6 +49,7 @@ export function pawnAttack(world, p, target, rng, opts = {}) {
   gainXp(p, ranged ? 'shooting' : 'melee', 40);
   if (!rng.chance(hitChance)) return true;
   let dmg = (ranged ? w.ranged : w.melee) * (1 + skill * 0.04) * (1 + ((ranged ? p.fx.ranged : p.fx.melee) || 0));
+  if (!ranged && !opts.fists) { dmg *= swordDmg(p); if (p.tools?.sword) { p.toolOut = 'sword'; wearTool(world, p, 'sword', 0.5); } }
   if (p.buff.valorUntil > world.time) dmg *= 1.35;
   if (p.buff.championUntil) dmg *= 1.6;
   if (target.look) { // pawn target

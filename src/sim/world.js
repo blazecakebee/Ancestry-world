@@ -104,8 +104,9 @@ export function foundSettlement(world, nation, x, y, capital = false) {
   const rng = world.rng;
   const id = world.nextId.settlement++;
   const s = { id, nationId: nation.id, name: settlementName(rng, nation.lang), x: Math.floor(x), y: Math.floor(y), founded: world.time,
-    stock: { food: 70, meals: 15, rations: 0, wood: 30, stone: 6, metal: 0, cloth: 6, medicine: 4 },
-    items: { berries: 40, beef: 30, meal: 15, wood: 30, stone: 6, hide: 6, medicine: 4 },
+    // a new people start with next to nothing: a few handfuls of berries, everything else they gather themselves
+    stock: { food: 8, meals: 0, rations: 0, wood: 0, stone: 0, metal: 0, cloth: 0, medicine: 0 },
+    items: { berries: 8 },
     radius: 7, plans: [], buildings: [], until: {}, pollution: 0, pop: 0, capital, lastPlan: 0, mood: 50 };
   world.settlements[id] = s;
   if (capital) nation.capitalId = id;

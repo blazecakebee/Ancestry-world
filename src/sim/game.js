@@ -13,7 +13,8 @@ import { stepStoryteller, stepWorldAge, handleWorldEvents } from './events.js';
 import { applyCommand, refreshBuffs } from './commands.js';
 import { buildSpatial, logEvent, emitFx, pawnsNear, DAY_SECONDS } from './world.js';
 import { pawnAttack } from './combat.js';
-import { stepDrops } from './items.js';
+import { stepDrops, dropItem } from './items.js';
+import { DAY_LEN } from '../core/time.js';
 import { dist, wrap } from '../core/util.js';
 import { BIOMES, F } from '../data/biomes.js';
 import { nationMults } from './nation.js';
@@ -79,6 +80,17 @@ export class Game {
         import_updateMood(p, w.time, dt * 3, nm);
       }
       if (tick % 30 === 0 && p.buff.fxOn) refreshBuffs(w, p); // expire/re-apply divine buffs (haste, ward, fervor...)
+      if (p.carry) { // never lug a basket around forever: empty ones vanish, stale loads are set down for the haulers
+        const amt = p.carry.amt + (p.carry.extra || []).reduce((a, e) => a + e[1], 0);
+        if (!(amt > 0.01) && !p.carry.site) p.carry = null;
+        else if (p.carry._t === undefined) p.carry._t = w.time;
+        else if (w.time - p.carry._t > 1.5 * DAY_LEN || p.dead || p.raider) {
+          const c = p.carry; p.carry = null;
+          if (c.item) dropItem(w, c.item, c.amt, p.x, p.y);
+          for (const [id, k] of c.extra || []) dropItem(w, id, k, p.x, p.y);
+          if (c.hide) dropItem(w, 'hide', c.hide, p.x, p.y);
+        }
+      }
       if (p.heldBy) { if (p.dead || !w.players?.[p.heldBy]) p.heldBy = null; else { p.state = 'held'; p.moving = false; continue; } } // lifted by a deity's hand
       if (p.raider) { this.stepRaider(p, dt); continue; }
       if (!s && !p.possessedBy && !p.squad) { // homeless wanderer: rejoin nearest settlement of own nation

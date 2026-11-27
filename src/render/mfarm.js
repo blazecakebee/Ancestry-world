@@ -34,6 +34,7 @@ const PICK = {
   storage: ['canopy_tools', 'canopy_tools', 'canopy_tools', 'hayloft', 'hayloft', 'hayloft', 'silo', 'me:hardware', 'me:hangar', 'me:hangar'],
   kitchen: [null, 'oven', 'oven', 'oven', 'oven', 'oven', 'me:coffee', 'me:coffee', 'me:mushroom', 'me:mushroom'],
   workshop: [null, 'woodwork', 'woodwork', 'woodwork', 'woodwork', 'diy', 'diy', 'me:hardware', 'me:hardware', 'me:hardware'],
+  bench: ['woodwork', 'woodwork', 'woodwork', 'woodwork', 'woodwork', 'woodwork', 'diy', 'diy', 'me:hardware', 'me:hardware'],
   tailor: ['tailor', 'tailor', 'tailor', 'tailor', 'tailor', 'tailor', 'me:postoffice', 'me:postoffice', 'me:postoffice', 'me:postoffice'],
   market: [null, null, 'market', 'market2', 'me:marketmed', 'me:marketmed', 'me:marketbig', 'me:mall', 'me:mall', 'me:mall'],
   well: [null, 'well', 'well', 'well', 'well', 'me:windmill', 'me:windmill', 'me:fountain2', 'me:fountain2', 'me:fountain2'],

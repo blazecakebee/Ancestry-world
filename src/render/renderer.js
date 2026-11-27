@@ -6,9 +6,8 @@ import { buildingSprite, scaffold, ROOF_PAD } from './buildart.js';
 import { flagCanvas, iconCanvas } from './miscart.js';
 import { pawnSheet, FW, FH } from './pawnart.js';
 import { PACK, packSheet, PW, PH, DIR } from './charpack.js';
-import { Ragdoll } from './ragdoll.js';
 import { LPC, lpcSheet, LW, LH, LROW, LPC_BAND } from './lpc.js';
-import { GCH, gcharSheet, loadGChar, GW, GH, GFOOT, GTOP, GROW, GBAND } from './gchar.js';
+import { GCH, gcharSheet, loadGChar, GW, GH, GFOOT, GTOP, GROW, GBAND, heldArt } from './gchar.js';
 import * as GAN from './gandalf.js';
 import { loadFarm, farmFrame, cropFrame } from './farm.js';
 // which Modern Farm crop (row in crops.png) a field draws: staples common, exotics rare
@@ -45,7 +44,7 @@ export class Renderer {
     this.canvas = canvas; this.ctx = canvas.getContext('2d', { alpha: false });
     this.settings = settings;
     this.cam = { x: 0, y: 0, zoom: 2, tz: 2, lat0: 0.25, vx: 0, vy: 0 };
-    this.chunks = new Map(); this.fx = new FX(); this.globe = new Globe(); this.ragdolls = new Map();
+    this.chunks = new Map(); this.fx = new FX(); this.globe = new Globe();
     this.time = 0; this.overlay = 'none'; this.hover = null; this.selection = null; this.pins = new Set();
     this.ghost = null; // building placement preview
     this.powerPreview = null;
@@ -57,7 +56,7 @@ export class Renderer {
   }
   attach(world) {
     this.world = world;
-    this.chunks.clear(); this.ragdolls.clear(); this.sheets.clear();
+    this.chunks.clear(); this.sheets.clear();
     const { W, H } = world;
     this.mapCanvas = makeCanvas(W, H); this.mapCtx = this.mapCanvas.getContext('2d');
     this.mapImg = this.mapCtx.createImageData(W, H); this.mapBuf = new Uint32Array(this.mapImg.data.buffer);
@@ -367,8 +366,8 @@ export class Renderer {
     this.onFxHook?.(e);
     if ((e.type === 'death' || e.type === 'knock') && e.pid) {
       const p = this.world.pawns[e.pid]; if (!p) return;
-      if (e.type === 'death' && !this.ragdolls.get(p.id) && this.sheetFor(p)?.g) { p._dieAt = this.time; return; } // play the death animation
-      this.startRagdoll(p, e.ix || 0, e.iy || 0, e.type === 'death');
+      // sprite animations only (no ragdoll): a collapse for deaths, a hop-and-fall for knockbacks
+      if (e.type === 'death') p._dieAt = this.time; else { p._knockAt = this.time; p._knockH = Math.min(1.6, 0.6 + Math.abs(e.iy || 0) * 0.12); }
       return;
     }
     if (e.type === 'built' || e.type === 'era' || e.type === 'founded') { // nearby citizens jump for joy
@@ -377,17 +376,6 @@ export class Renderer {
     if (e.type === 'era') { const n = this.world.nations[e.nationId]; e.label = `${n ? n.name : ''} — ${['Stone Age', 'Neolithic', 'Bronze Age', 'Iron Age', 'Medieval', 'Renaissance', 'Industrial', 'Atomic', 'Ultra-Tech', 'Offworld'][e.era]}`; }
     this.fx.handle(e, this.settings);
   }
-  startRagdoll(p, ix, iy, dead) {
-    const sh = this.sheetFor(p); if (!sh) return;
-    const facing = p.facing || 1;
-    let rd;
-    if (sh.g) rd = new Ragdoll(sh.sheet, 0, GROW.flail * GH, GW, GH, GBAND, ix * 60, iy * 60 + 120, { dead, flip: p._gFlip ? -1 : 1 });
-    else if (sh.lpc) rd = new Ragdoll(sh.sheet, 0, (LROW.walk + DIR.FRONT) * LH, LW, LH, LPC_BAND, ix * 60, iy * 60 + 120, { dead, flip: 1 });
-    else if (sh.pack) { const ch = sh.ch, h = ch.bottom - ch.top; rd = new Ragdoll(sh.sheet, 0, DIR.FRONT * PH, PW, PH, { top: ch.top, headEnd: ch.top + Math.round(h * 0.4), hipY: ch.top + Math.round(h * 0.7), bottom: ch.bottom, cx: ch.cx }, ix * 60, iy * 60 + 120, { dead, flip: 1 }); }
-    else rd = new Ragdoll(sh.sheet, 0, 0, FW, FH, { top: 6, headEnd: 21, hipY: 33, bottom: 47, cx: 16 }, ix * 60, iy * 60 + 120, { dead, flip: facing });
-    this.ragdolls.set(p.id, rd);
-  }
-
   sheetFor(p) {
     const n = this.world.nations[p.nationId];
     const era = p.gearEra ?? n?.era ?? 0, col = n?.color || '#cccccc';
@@ -395,7 +383,7 @@ export class Renderer {
     const useG = GCH.ready && (style === 'lpc' || style === 'gandalf');
     const useLpc = !useG && LPC.ready && (style === 'lpc' || style === 'lpc_old');
     const usePack = !useLpc && PACK.ready && style !== 'procedural';
-    const key = `${p.id}|${era}|${p.role}|${col}|${useG ? 'G' : useLpc ? 'L' : usePack ? 'P' : 'R'}|${p.age < 14 ? 'c' : p.age > 58 ? 'o' : 'a'}|${p.race}`;
+    const key = `${p.id}|${era}|${p.role}|${col}|${useG ? 'G' : useLpc ? 'L' : usePack ? 'P' : 'R'}|${p.age < 14 ? 'c' : p.age > 58 ? 'o' : 'a'}|${p.race}|${useG ? heldArt(p) || '' : ''}|${p.work || ''}`;
     let e = this.sheets.get(key);
     if (e) { e.used = this.time; return e; }
     if (this.sheetBudget-- <= 0) return this.lastSheet?.get(p.id) || null;
@@ -763,21 +751,16 @@ export class Renderer {
 
   drawPawn(ctx, p, s, dt) {
     const w = this.world; let [sx, sy] = this.worldToScreen(p.rx, p.ry);
-    const rd = this.ragdolls.get(p.id);
     const sh = this.sheetFor(p);
     const scale = (p.age < 14 ? 0.55 + (p.age / 14) * 0.4 : 1) * (1 + (p.fx?.size || 0)) * (p.look?.height || 1);
     const S = s * scale * (sh0g(this, p) ? 1.2 : 1);
     const held = !!p.heldBy && !p.dead;
     // shadow (shrinks while lifted off the ground)
     ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(sx, sy, (held ? 4 : 7) * S, (held ? 1.6 : 2.5) * S, 0, 0, 7); ctx.fill();
-    if (held) { this.ragdolls.delete(p.id); sy -= (16 + Math.sin(this.rtime * 3) * 2) * S; }
+    if (held) { p._knockAt = undefined; sy -= (16 + Math.sin(this.rtime * 3) * 2) * S; }
+    const kt = p._knockAt !== undefined && !held && !p.dead ? this.time - p._knockAt : -1, knocked = kt >= 0 && kt < 1.5;
+    if (knocked && kt < 0.4) sy -= Math.sin(kt / 0.4 * Math.PI) * 9 * (p._knockH || 1) * S; // hop through the air
     if (!sh) return;
-    if (rd) {
-      if (!rd.step(dt)) this.ragdolls.delete(p.id);
-      rd.draw(ctx, sx, sy, S);
-      if (!p.dead && !rd.dead) return;
-      if (p.dead) return;
-    }
     const st = p.state, moving = this.time - (p._moving || 0) < 0.15;
     const dir = sh.pack ? (p._dir ?? DIR.FRONT) : 0;
     let f = 0;
@@ -786,12 +769,14 @@ export class Renderer {
     else if (st === 'work') f = 6 + (Math.floor(at * 0.7) % 2);
     else if (moving || st === 'walk') f = 2 + (Math.floor(at) % 4);
     else f = Math.floor(at / 6) % 2;
-    const lying = st === 'sleep' || st === 'downed' || p.dead;
+    const lying = st === 'sleep' || st === 'downed' || p.dead || (knocked && kt >= 0.75);
     let fw, fh, sxF, syF, footY, topY;
     if (sh.g) {
       fw = GW; fh = GH; footY = GFOOT + 1; topY = GTOP;
       const run = moving && (st === 'fight' || st === 'flee' || p.attackAnim > 0 || p.brk?.type === 'flee');
       if (held) { sxF = (Math.floor(this.rtime * 9 + p.id) % 4) * GW; syF = GROW.flail * GH; }                  // kicking in the air
+      else if (knocked && kt < 0.4) { sxF = (Math.floor(kt * 10) % 4) * GW; syF = GROW.flail * GH; }          // flung
+      else if (knocked && kt < 0.75) { sxF = Math.min(9, 5 + Math.floor((kt - 0.4) * 14)) * GW; syF = GROW.death * GH; } // hits the ground
       else if (p.dead && p._dieAt !== undefined && this.time - p._dieAt < 1.1) { sxF = Math.min(9, Math.floor((this.time - p._dieAt) * 9)) * GW; syF = GROW.death * GH; } // collapse
       else if (lying) { sxF = 9 * GW; syF = GROW.death * GH; }
       else if (f >= 6) { sxF = (Math.floor(at * (st === 'work' ? 0.7 : 0.9)) % 6) * GW; syF = GROW.attack * GH; }
@@ -819,6 +804,12 @@ export class Renderer {
     if (p.possessedBy) { ctx.shadowColor = '#ffd34d'; ctx.shadowBlur = 8; }
     ctx.drawImage(sh.sheet, sxF, syF, fw, fh, -fw / 2 * S, -footY * S, fw * S, fh * S);
     ctx.restore();
+    if (sh.g && p.toolOut === 'rod' && st === 'work' && p.tools?.rod) { // fishing line + bobbing float
+      const fwd = p._gFlip ? 1 : -1, tx = sx + fwd * 17 * S, ty = sy - 30 * S, bx = sx + fwd * 30 * S, by = sy + 2 * S + Math.sin(this.time * 5 + p.id) * 1.2 * S;
+      ctx.strokeStyle = 'rgba(235,235,225,0.75)'; ctx.lineWidth = Math.max(1, S * 0.5);
+      ctx.beginPath(); ctx.moveTo(tx, ty); ctx.quadraticCurveTo(bx, ty + 6 * S, bx, by); ctx.stroke();
+      ctx.fillStyle = '#e8473c'; ctx.fillRect(bx - 1.2 * S, by - 1.2 * S, 2.4 * S, 1.4 * S); ctx.fillStyle = '#f4f1e8'; ctx.fillRect(bx - 1.2 * S, by + 0.2 * S, 2.4 * S, 1 * S);
+    }
     // indicators
     const headY = sy - (footY - topY) * S;
     p._hb = held ? [sx - 11 * S, headY - 2 * S, sx + 11 * S, sy + 3 * S, this.rtime] : lying ? [sx - 18 * S, sy - 14 * S, sx + 18 * S, sy + 3 * S, this.rtime] : [sx - 11 * S, headY - 2 * S, sx + 11 * S, sy + 3 * S, this.rtime]; // click box = drawn sprite

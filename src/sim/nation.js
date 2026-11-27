@@ -8,7 +8,7 @@ import { createChild, createPawn, addThought, fullName, isChild, computeFx, opin
 import { placeBuildingNear, settlementBuildings, claimTerritory, foundSettlement, foundNation, logEvent, emitFx, bCenter, releaseTerritory, removeBuilding } from './world.js';
 import { tempAt } from '../world/atmosphere.js';
 import { scaledCost, assignWorks, remainingCost } from './ai.js';
-import { syncItems, addItem } from './items.js';
+import { syncItems, addItem, takeCat } from './items.js';
 import { stepTech, initTechs, canBuildType } from './tech.js';
 import { wrap, dist, clamp } from '../core/util.js';
 import { DAY_LEN } from '../core/time.js';
@@ -136,6 +136,7 @@ function planBuildings(world, s, n, rng) {
   if (countB(world, s, 'temple') < 1 + Math.floor(pop / 26)) want.push(['temple', 5 + (a.faith < 0 ? 3 : 0)]);
   if (countB(world, s, 'healer') < 1 + Math.floor(pop / 22)) want.push(['healer', 6]);
   if (era >= 1 && countB(world, s, 'farm') < Math.ceil(pop / 5)) want.push(['farm', 9]);
+  if (countB(world, s, 'bench') < 1 && pop >= 2) want.push(['bench', 8]);
   if (countB(world, s, 'tailor') < 1 && pop >= 4) want.push(['tailor', 6]);
   if (era >= 1 && countB(world, s, 'coop') < 1 + Math.floor(pop / 25)) want.push(['coop', 5]);
   if (era >= 1 && countB(world, s, 'well') < 1 && pop > 8) want.push(['well', 3]);
@@ -310,8 +311,10 @@ function expansion(world, n, pawns, rng) {
     for (const p of crowded._pawns || []) { if (settlers.length >= 7) break; if (p.age > 16 && p.age < 45 && !settlers.includes(p) && p.id !== n.leaderId) for (const q of familyOf(world, p)) if (!settlers.includes(q)) settlers.push(q); }
     if (settlers.length < 3) return;
     const s = foundSettlement(world, n, site.x, site.y);
-    s.stock = { food: 25, meals: 6, rations: 4, wood: 25, stone: 5, metal: 0, cloth: 3, medicine: 2 };
-    crowded.stock.food = Math.max(0, crowded.stock.food - 25);
+    // settlers bring what they can carry from the old town: nothing appears from thin air
+    s.stock = { food: 0, meals: 0, rations: 0, wood: 0, stone: 0, metal: 0, cloth: 0, medicine: 0 }; s.items = {};
+    for (const [cat, amt] of [['food', 20], ['meals', 4], ['wood', 10]]) for (const [id, v] of takeCat(crowded, cat, amt)) addItem(s, id, v);
+    syncItems(s);
     moveGroup(world, settlers, s, n);
     emitFx(world, { type: 'founded', x: s.x, y: s.y, nationId: n.id });
   }

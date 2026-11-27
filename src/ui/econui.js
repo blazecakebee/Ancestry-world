@@ -166,20 +166,20 @@ import { dateString } from '../sim/world.js';
 
 export const ribbon = (text, cls = '') => h('div', { class: `ribbon ${cls}` }, h('i', { class: 'rb-l' }), h('span', { class: 'rb-m' }, text), h('i', { class: 'rb-r' }));
 /** Two-page spread: bookmarks across the top, the civilization on the left page, the chosen chapter on the right. */
-const BOOK = { tab: null, t: 0, opened: 0 };
+const BOOK = { tab: null, t: 0, opened: 0, seen: new Set(), leftSeen: false, tl: -1e9 };
 /** Paper "appear" animation (Humble Gift): a sheet of blank paper over the page dissolves to reveal the writing. */
 const appear = (since) => { const el = since < 1300 ? h('div', { class: 'appear', style: { animationDelay: `-${Math.round(since)}ms` } }) : null; return el; };
 export function bookSpread(tabList, tab, pick, left, title, right, openedAt = 0) {
+  // the paper "appear" animation plays once per page per session: first open for the left page, first visit for each chapter
   const now = performance.now();
-  if (openedAt && openedAt !== BOOK.opened) { BOOK.opened = openedAt; BOOK.t = now; BOOK.tab = tab; BOOK.both = true; }
-  if (tab !== BOOK.tab) { BOOK.tab = tab; BOOK.t = now; BOOK.both = false; }
-  const since = now - BOOK.t;
+  if (openedAt && openedAt !== BOOK.opened) { BOOK.opened = openedAt; BOOK.tab = null; if (!BOOK.leftSeen) { BOOK.leftSeen = true; BOOK.tl = now; } }
+  if (tab !== BOOK.tab) { BOOK.tab = tab; if (!BOOK.seen.has(tab)) { BOOK.seen.add(tab); BOOK.t = now; } else BOOK.t = -1e9; }
   return h('div', { class: 'book' },
     h('div', { class: 'book-spread' },
-      h('div', { class: 'page page-l' }, h('div', { class: 'page-in' }, left), BOOK.both ? appear(since) : null),
+      h('div', { class: 'page page-l' }, h('div', { class: 'page-in' }, left), appear(now - BOOK.tl)),
       h('div', { class: 'page page-r' },
         h('div', { class: 'book-marks' }, tabList.map(([id, label, ic]) => h('button', { class: `mark ${id === tab ? 'on' : ''}`, onclick: () => pick(id), tip: label }, iconImg(ic, 2, 'px-icon sm'), h('span', {}, label)))),
-        h('div', { class: 'page-in' }, ribbon(title, 'sm'), right), appear(since))));
+        h('div', { class: 'page-in' }, ribbon(title, 'sm'), right), appear(now - BOOK.t))));
 }
 /** Left page: who these people are, at a glance. */
 export function civPage(hud, w, n, pawns, leader, owner, mine) {

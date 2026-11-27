@@ -16,6 +16,9 @@ import { ignite } from '../world/physics.js';
 import { wrap, dist, dx, clamp } from '../core/util.js';
 import { DAY_LEN } from '../core/time.js';
 import { addItem, takeCat, dropItem, nearestDrop } from './items.js';
+import { toolSpeed, wearTool, upgradeFor, equipTool, craftChoice, craftTool } from './tools.js';
+/** Which tool a map feature is worked with. */
+const featTool = (f) => (f === F.TREE ? 'axe' : f === F.ROCK || f === F.ORE || f === F.GOLD ? 'pickaxe' : 'sickle');
 import { CROPS, ANIMAL_DROPS, cropKindAt, wildFruit, itemCat } from '../data/items.js';
 
 const tileIdx = (world, x, y) => Math.floor(y) * world.W + wrap(Math.floor(x), world.W);
@@ -234,7 +237,7 @@ function stepPossessed(world, p, dt, ctx) {
   const animalsNear = () => Object.values(world.animals).filter((a) => !a.dead && !ANIMALS[a.kind]?.noHunt && dist(a.x, a.y, fx, fy, world.W) < 1.6);
   const gather = (feats, tool) => {
     const i = featInReach(world, p, feats); if (i < 0) return false;
-    harvestTile(world, p, i, ctx, 1); p.attackAnim = 1; p.state = 'work'; p.tool = tool; return true;
+    const tk = featTool(world.tiles.feat[i]); harvestTile(world, p, i, ctx, 1); wearTool(world, p, tk, 0.5); p.toolOut = tk; p.attackAnim = 1; p.state = 'work'; p.tool = tool; return true;
   };
   const fight = () => {
     const pawn = mayTouchPawn(world, p, clicked) ? clicked : null, animal = animalsNear()[0];
@@ -311,6 +314,8 @@ export function chooseJob(world, p, ctx) {
   const { rng, s, n } = ctx;
   const now = world.time;
   if (!s) return { type: 'wander', until: now + 0.2 };
+  if (p.carry && !p.carry.site) return { type: 'deliver' }; // empty your basket at the store before anything else
+  { const up = upgradeFor(p, s); if (up) return { type: 'equip', item: up }; } // grab a better tool for your trade off the shelf
   const st = s.stock;
   const lt = localTime(world, s.x);
   const night = p.traits.includes('nightOwl') ? (lt > 0.35 && lt < 0.7) : (lt < 0.22 || lt > 0.9);
@@ -356,6 +361,14 @@ export function chooseJob(world, p, ctx) {
   if (n.techs?.tailoring && (p.gearEra < n.era || !p.dressed) && (st.cloth || 0) >= (n.era >= 2 ? 2 : 1)) {
     const tb = settlementBuildings(world, s, 'tailor')[0] || settlementBuildings(world, s, 'workshop')[0];
     opts.push([{ type: 'tailor', bid: tb?.id ?? null }, job === 'crafter' ? 9 : 5]);
+  }
+  // the crafting bench: make tools and weapons for whoever lacks them (crafters first; anyone when nobody else can)
+  {
+    const bench = settlementBuildings(world, s, 'bench')[0] || settlementBuildings(world, s, 'workshop')[0];
+    if (bench && p.age >= 14) {
+      if (!s._craft || now - s._craft.t > 0.4) s._craft = { t: now, c: craftChoice(world, s, n, Object.values(world.pawns).filter((q) => q.settlementId === s.id && !q.dead)) };
+      if (s._craft.c) opts.push([{ type: 'toolcraft', bid: bench.id }, job === 'crafter' ? 10 : 2.4]);
+    }
   }
   // construction: deliver materials, then build
   const sites = s.buildings.map((id) => world.buildings[id]).filter((b) => b && !b.built && !BUILDINGS[b.type].field);
@@ -525,6 +538,7 @@ export function doJob(world, p, dt, ctx) {
   if (p.carry && j.type !== 'gather' && j.type !== 'gatherFeat' && j.type !== 'hunt' && j.type !== 'fish' && j.type !== 'supply' && j.type !== 'haul') { if (deliver(world, p, dt, ctx)) p.job = null; return; }
   const done = () => { p.job = null; p.state = 'idle'; };
   switch (j.type) {
+    case 'deliver': return done();
     case 'wander': {
       p.state = 'walk';
       if (!p.path || walk(world, p, dt)) { if (now > j.until) return done(); goTo(world, p, s ? s.x + rng.range(-s.radius * 0.7, s.radius * 0.7) : p.x + rng.range(-4, 4), s ? s.y + rng.range(-s.radius * 0.7, s.radius * 0.7) : p.y + rng.range(-4, 4), 400); }
@@ -600,10 +614,11 @@ export function doJob(world, p, dt, ctx) {
       const x = (j.i % W) + 0.5, y = Math.floor(j.i / W) + 0.5;
       if (!arriveAt(world, p, x, y, dt, 1.3)) return;
       p.state = 'work'; p.facing = dx(p.x, x, W) >= 0 ? 1 : -1;
-      j.t = (j.t || 0) + dt * workSpeed(p) * (n.era >= 1 ? 1.2 : 1);
+      const tk = featTool(t.feat[j.i]);
+      j.t = (j.t || 0) + dt * workSpeed(p) * (n.era >= 1 ? 1.2 : 1) * toolSpeed(p, tk);
       if (j.t < 0.025) return;
       j.t = 0;
-      harvestTile(world, p, j.i, ctx);
+      harvestTile(world, p, j.i, ctx); wearTool(world, p, tk);
       if (j.forage && p.carry) { p.needs.food = Math.min(1, p.needs.food + 0.35); p.carry.amt = Math.max(0, p.carry.amt - 1); return done(); }
       return;
     }
@@ -611,8 +626,9 @@ export function doJob(world, p, dt, ctx) {
       const x = (j.i % W) + 0.5, y = Math.floor(j.i / W) + 0.5;
       if (!arriveAt(world, p, x, y, dt, 1.0)) return;
       p.state = 'work';
-      j.t = (j.t || 0) + dt * workSpeed(p) * skillFactor(p, 'plants');
+      j.t = (j.t || 0) + dt * workSpeed(p) * skillFactor(p, 'plants') * toolSpeed(p, j.sow ? 'shovel' : 'sickle');
       if (j.t < (j.sow ? 0.015 : 0.02)) return;
+      wearTool(world, p, j.sow ? 'shovel' : 'sickle', 0.5);
       if (j.sow && t.feat[j.i] === F.FARM && t.crop[j.i] === 0) { t.crop[j.i] = 1; world.dirty.add(j.i); gainXp(p, 'plants', 40); }
       else if (!j.sow && t.feat[j.i] === F.CROP_READY) { harvestTile(world, p, j.i, ctx); }
       return done();
@@ -647,8 +663,8 @@ export function doJob(world, p, dt, ctx) {
       const x = (j.i % W) + 0.5, y = Math.floor(j.i / W) + 0.5;
       if (!arriveAt(world, p, x, y, dt, 1.0)) return;
       p.state = 'work';
-      j.t = (j.t || 0) + dt * workSpeed(p) * skillFactor(p, 'animals') * (n.era >= 2 ? 1.4 : 1);
-      if (j.t > 0.05) { j.t = 0; gainXp(p, 'animals', 60); if (rng.chance(0.75)) { const fi = p.carry?.item || (rng.chance(0.3) ? 'fish2' : 'fish'); p.carry = { res: 'food', item: fi, amt: (p.carry?.amt || 0) + 3 + (n.era >= 2 ? 1 : 0) }; emitFx(world, { type: 'chip', x, y, res: 'food', item: fi }); } if ((j.n = (j.n || 0) + 1) >= 3) j.done = true; }
+      j.t = (j.t || 0) + dt * workSpeed(p) * skillFactor(p, 'animals') * (n.era >= 2 ? 1.4 : 1) * toolSpeed(p, 'rod');
+      if (j.t > 0.05) { j.t = 0; gainXp(p, 'animals', 60); wearTool(world, p, 'rod'); if (rng.chance(0.75)) { const fi = p.carry?.item || (rng.chance(0.3) ? 'fish2' : 'fish'); p.carry = { res: 'food', item: fi, amt: (p.carry?.amt || 0) + 3 + (n.era >= 2 ? 1 : 0) }; emitFx(world, { type: 'chip', x, y, res: 'food', item: fi }); } if ((j.n = (j.n || 0) + 1) >= 3) j.done = true; }
       if (j.done && p.carry) return;
       if (j.done) return done();
       return;
@@ -683,7 +699,8 @@ export function doJob(world, p, dt, ctx) {
         b.paid = true;
       }
       p.state = 'work';
-      b.progress += (dt * workSpeed(p) * skillFactor(p, 'construction') * (1 + (n.techFx?.build || 0)) * 100) / Math.max(10, def.work * (1 + b.era * 0.15));
+      const bp = (dt * workSpeed(p) * skillFactor(p, 'construction') * (1 + (n.techFx?.build || 0)) * toolSpeed(p, 'shovel') * 100) / Math.max(10, def.work * (1 + b.era * 0.15));
+      b.progress += bp; wearTool(world, p, 'shovel', bp * 12);
       gainXp(p, 'construction', 30);
       if (rng.chance(dt * 20)) emitFx(world, { type: 'chip', x, y, res: 'wood' });
       if (b.progress >= 1) {
@@ -733,14 +750,33 @@ export function doJob(world, p, dt, ctx) {
       const [x, y] = bCenter(b);
       if (!arriveAt(world, p, x, y + 0.6, dt, 1.6)) return;
       p.state = 'work'; p.tool = 'pick';
-      j.t = (j.t || 0) + dt * workSpeed(p) * skillFactor(p, 'mining') * (1 + (n.techFx?.mine || 0));
+      j.t = (j.t || 0) + dt * workSpeed(p) * skillFactor(p, 'mining') * (1 + (n.techFx?.mine || 0)) * toolSpeed(p, 'pickaxe');
       if (j.t < 0.05) return;
-      j.t = 0; gainXp(p, 'mining', 90);
+      j.t = 0; gainXp(p, 'mining', 90); wearTool(world, p, 'pickaxe');
       const r = rng.next(), item = r < 0.05 + n.era * 0.005 ? 'gold' : r < 0.45 ? (n.era >= 3 ? 'iron' : 'copper') : 'stone';
       const amt = item === 'gold' ? 1 : 2 + Math.floor(p.skills.mining.lvl / 5);
       if (p.carry?.item === item) p.carry.amt += amt; else if (p.carry) { const ex = (p.carry.extra ||= []), e = ex.find((z) => z[0] === item); if (e) e[1] += amt; else ex.push([item, amt]); } else p.carry = { res: itemCat(item), item, amt };
       emitFx(world, { type: 'chip', x, y, res: itemCat(item), item });
       return;
+    }
+    case 'equip': { // fetch a tool from the store
+      const store = settlementBuildings(world, s, 'storage')[0] || world.buildings[s.buildings[0]];
+      const [x, y] = store ? bCenter(store) : [s.x, s.y];
+      if (!arriveAt(world, p, x, y, dt, 1.8)) return;
+      if (equipTool(p, s, j.item)) emitFx(world, { type: 'emote', pid: p.id, icon: 'hammer' });
+      return done();
+    }
+    case 'toolcraft': { // make a tool at the crafting bench
+      const b = world.buildings[j.bid]; if (!b || !b.built) return done();
+      const [x, y] = bCenter(b);
+      if (!arriveAt(world, p, x + rng.range(-0.5, 0.5), y + 0.8, dt, 1.8)) return;
+      p.state = 'work'; p.toolOut = null;
+      j.t = (j.t || 0) + dt * workSpeed(p) * skillFactor(p, 'crafting') * (BUILDINGS[b.type].fn.craft || 1);
+      if (j.t < 0.07) return;
+      const c = s._craft?.c || craftChoice(world, s, n, Object.values(world.pawns).filter((q) => q.settlementId === s.id && !q.dead));
+      s._craft = null;
+      if (c) { const made = craftTool(world, s, c.kind, c.mat); if (made) { gainXp(p, 'crafting', 220); emitFx(world, { type: 'chip', x, y, res: 'tools', item: `${c.kind}_${c.mat}` }); } }
+      return done();
     }
     case 'tailor': { // sew a new outfit for yourself (or a child) from cloth, hides or wool
       const b = j.bid != null ? world.buildings[j.bid] : null, [x, y] = b ? bCenter(b) : [s.x, s.y];

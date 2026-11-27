@@ -7,6 +7,7 @@ import { ERAS } from '../data/eras.js';
 import { TRAITS } from '../data/traits.js';
 import { SKILLS, THOUGHTS, AXES, GOVERNMENTS, BREAK_LABELS } from '../data/society.js';
 import { BUILDINGS, BUILD_ORDER, buildingName, RESOURCES, RES_LABEL } from '../data/buildings.js';
+import { TOOL_KINDS, TOOL_MATS, TOOL_ORDER, toolId, toolName } from '../data/tools.js';
 import { RACES } from '../data/races.js';
 import { PARTS, DISEASES } from '../sim/health.js';
 import { relationLabel, fullName } from '../sim/pawn.js';
@@ -25,7 +26,7 @@ import { PW, PH, DIR } from '../render/charpack.js';
 import { saveSettings } from './settings.js';
 import { creedPanel } from './creedui.js';
 import { FW, FH } from '../render/pawnart.js';
-import { openBuildMenu as econBuildMenu, StoresPanel, openBuildingWindow, researchPanel, workName, bookSpread, civPage, chroniclePage } from './econui.js';
+import { openBuildMenu as econBuildMenu, StoresPanel, openBuildingWindow, researchPanel, workName, bookSpread, civPage, chroniclePage, itemIcon } from './econui.js';
 import { TECH } from '../data/tech.js';
 import { WORKS } from '../sim/ai.js';
 
@@ -434,7 +435,14 @@ export class HUD {
         add(content, h('b', {}, 'Family'), ...fam.map((id) => { const q = w.pawns[id]; return h('div', { class: 'thought' }, link(q), h('span', { class: 'muted' }, relationLabel(p, q) + (q.dead ? ' ✝' : ''))); }), !fam.length ? h('div', { class: 'small muted' }, 'No living family nearby.') : null,
           h('b', {}, 'Relationships'), ...rel.map(([id, op]) => { const q = w.pawns[id]; return q ? h('div', { class: 'thought' }, link(q), h('span', { class: op >= 0 ? 'pos' : 'neg' }, `${relationLabel(p, q)} (${op > 0 ? '+' : ''}${Math.round(op)})`)) : null; }));
       }
-      if (tab === 'gear') { const e = ERAS[p.gearEra ?? 0]; add(content, h('div', { class: 'kv' }, h('dt', {}, 'Outfit era'), h('dd', {}, e.name), h('dt', {}, 'Weapon'), h('dd', {}, e.weapon.name), h('dt', {}, 'Armor'), h('dd', {}, `${Math.round(e.armor * 100)}%`), h('dt', {}, 'Insulation'), h('dd', {}, `comfortable down to ~${Math.round(16 - e.insul * 42)}°C`), h('dt', {}, 'Kills'), h('dd', {}, p.kills || 0))); }
+      if (tab === 'gear') { const e = ERAS[p.gearEra ?? 0]; add(content, h('div', { class: 'kv' }, h('dt', {}, 'Outfit era'), h('dd', {}, e.name), h('dt', {}, 'Weapon'), h('dd', {}, e.weapon.name), h('dt', {}, 'Armor'), h('dd', {}, `${Math.round(e.armor * 100)}%`), h('dt', {}, 'Insulation'), h('dd', {}, `comfortable down to ~${Math.round(16 - e.insul * 42)}°C`), h('dt', {}, 'Kills'), h('dd', {}, p.kills || 0)));
+        // personal kit: one of each tool kind, with wear
+        add(content, h('h4', {}, 'Tools & weapons'));
+        const kit = TOOL_ORDER.filter((k) => p.tools?.[k]);
+        add(content, kit.length ? h('div', { class: 'col', style: { gap: '6px' } }, kit.map((k) => { const t = p.tools[k], M = TOOL_MATS[t.m];
+          return h('div', { class: 'row', tip: TOOL_KINDS[k].desc }, itemIcon(toolId(k, t.m), 24), h('span', { class: 'grow' }, toolName(k, t.m), p.toolOut === k ? h('span', { class: 'muted tiny' }, ' · in hand') : null),
+            h('span', { class: 'tiny muted', style: { width: '90px' } }, k === 'sword' ? `×${M.dmg} damage` : `×${M.speed} speed`), h('div', { style: { width: '70px' }, tip: 'Wear: breaks when empty' }, bar(Math.max(0, t.u) / M.uses, t.u / M.uses < 0.25 ? 'bad' : ''))); }))
+          : h('p', { class: 'muted small' }, 'Empty-handed. A crafting bench makes tools from wood, stone, iron or gold; tools make work much faster.')); }
       return h('div', { class: 'col' }, head, tabs([['overview', 'Overview'], ['skills', 'Skills'], ['health', 'Health'], ['social', 'Social'], ['gear', 'Gear']], tab, (t) => { tab = t; win.update(); }), content);
     }, { x: innerWidth - 790, y: 90, w: 420, h: 560, icon: iconImg('inspect'), onClose: () => app.session.watch([]) });
   }
@@ -514,7 +522,7 @@ export class HUD {
       const tabList = [['overview', 'Chronicle', 'scroll'], ['research', 'Research', 'research'], ['will', mine ? 'Creed & Will' : 'Creed', 'dove'], ['diplo', 'Diplomacy', 'users']];
       if (mine && app.session.mode !== 'single') tabList.push(['perms', 'Permissions', 'lock']);
       if (tab === 'overview') add(content, chroniclePage(w, n, pawns));
-      return bookSpread(tabList, tab, (t) => { tab = t; win.update(); }, civPage(this, w, n, pawns, leader, owner, mine), tabList.find((t) => t[0] === tab)?.[1] || '', content, openedAt);
+      return bookSpread(tabList, tab, (t) => { tab = t; win.update(); let k = 0; const iv = setInterval(() => { win.update(); if (++k > 15) clearInterval(iv); }, 90); }, civPage(this, w, n, pawns, leader, owner, mine), tabList.find((t) => t[0] === tab)?.[1] || '', content, openedAt);
     }, { x: Math.max(8, innerWidth / 2 - bw / 2), y: Math.max(8, (innerHeight - bh) / 2), w: bw, h: bh, icon: iconImg('flag') });
     win.el.classList.add('book-win');
     { let k = 0; const iv = setInterval(() => { win.update(); if (++k > 14) clearInterval(iv); }, 90); } // drive the page-appear animation

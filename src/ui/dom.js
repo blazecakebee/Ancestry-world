@@ -137,6 +137,8 @@ export function clampToViewport(el) {
   el.style.top = Math.max(M, Math.min(vh - hh - M, el.offsetTop)) + 'px';
 }
 addEventListener('resize', () => { for (const w of wins.values()) clampToViewport(w.el); });
+function pathOf(e, root) { const p = []; while (e && e !== root) { p.unshift([...e.parentNode.children].indexOf(e)); e = e.parentNode; } return p; }
+function atPath(root, p) { let e = root; for (const i of p) { e = e?.children[i]; if (!e) return null; } return e; }
 export function openWindow(id, title, render, { x, y, w = 380, h: ht = 480, icon, onClose } = {}) {
   let win = wins.get(id);
   if (win) { win.render = render; win.setTitle(title); win.update(); win.focus(); return win; }
@@ -159,7 +161,14 @@ export function openWindow(id, title, render, { x, y, w = 380, h: ht = 480, icon
           // only touch the DOM when something actually changed: stops flicker and keeps tooltips/hover alive
           let sig = out.outerHTML || '';
           for (const c of out.querySelectorAll?.('canvas') || []) { try { const u = c.toDataURL(); sig += '|' + u.length + u.slice(-48); } catch (e) { sig += '|c'; } }
-          if (sig !== win._sig || !body.firstChild) { win._sig = sig; body.replaceChildren(out); }
+          if (sig !== win._sig || !body.firstChild) {
+            win._sig = sig;
+            // keep the scroll position of every inner scroller (book pages, lists) across the re-render
+            const saved = [];
+            if (body.firstChild) for (const e of body.querySelectorAll('*')) if (e.scrollTop > 0 || e.scrollLeft > 0) saved.push([pathOf(e, body), e.scrollTop, e.scrollLeft]);
+            body.replaceChildren(out);
+            for (const [path, t, l] of saved) { const e = atPath(body, path); if (e) { e.scrollTop = t; e.scrollLeft = l; } }
+          }
         }
         body.scrollTop = scroll;
       } catch (e) { console.error(e); }

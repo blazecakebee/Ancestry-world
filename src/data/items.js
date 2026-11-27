@@ -2,9 +2,10 @@
 // economy reasons about: food, meals, rations, wood, stone, metal, cloth, medicine). Icons are Modern Farm art
 // (assets/packs/mfarm/items/<id>.png) or an atlas icon name for the few goods that pack has no picture for.
 import { B } from './biomes.js';
+import { TOOL_KINDS, TOOL_MATS, toolId, toolName } from './tools.js';
 
-export const CATS = ['food', 'meals', 'rations', 'wood', 'stone', 'metal', 'cloth', 'medicine'];
-export const CAT_LABEL = { food: 'Raw food', meals: 'Meals', rations: 'Rations', wood: 'Wood', stone: 'Stone', metal: 'Metal', cloth: 'Cloth & hides', medicine: 'Medicine' };
+export const CATS = ['food', 'meals', 'rations', 'wood', 'stone', 'metal', 'cloth', 'medicine', 'tools'];
+export const CAT_LABEL = { food: 'Raw food', meals: 'Meals', rations: 'Rations', wood: 'Wood', stone: 'Stone', metal: 'Metal', cloth: 'Cloth & hides', medicine: 'Medicine', tools: 'Tools & weapons' };
 
 // id: [name, category, value per unit (how much of the category one unit is worth)]
 export const ITEMS = {
@@ -22,12 +23,13 @@ export const ITEMS = {
   hide: ['Hides', 'cloth'], wool: ['Wool', 'cloth'], cotton: ['Cotton', 'cloth'], cloth: ['Woven cloth', 'cloth'],
   medicine: ['Medicine', 'medicine'],
 };
+for (const k of Object.keys(TOOL_KINDS)) for (const m of Object.keys(TOOL_MATS)) ITEMS[toolId(k, m)] = [toolName(k, m), 'tools'];
 export const itemName = (id) => ITEMS[id]?.[0] || id;
 export const itemCat = (id) => ITEMS[id]?.[1] || id;
 /** Atlas icon fallback for items without Modern Farm art. */
 export const ITEM_ATLAS = { medicine: 'medicine' };
 /** The generic item a category falls back to when old code adds to a category total directly. */
-export const CAT_DEFAULT = { food: 'berries', meals: 'meal', rations: 'ration', wood: 'wood', stone: 'stone', metal: 'copper', cloth: 'hide', medicine: 'medicine' };
+export const CAT_DEFAULT = { food: 'berries', meals: 'meal', rations: 'ration', wood: 'wood', stone: 'stone', metal: 'copper', cloth: 'hide', medicine: 'medicine', tools: 'axe_wood' };
 
 // What hunting / butchering each creature gives: [meat item, meat amount, extra item, extra amount]
 export const ANIMAL_DROPS = {

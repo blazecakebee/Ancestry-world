@@ -64,7 +64,7 @@ export function deserializeWorld(s) {
 // ---------------- network snapshots ----------------
 const STATE_CODE = { idle: 0, walk: 1, work: 2, fight: 3, sleep: 4, eat: 5, downed: 6, dead: 7, break: 8, held: 9, flee: 10 };
 const STATE_NAME = Object.fromEntries(Object.entries(STATE_CODE).map(([k, v]) => [v, k]));
-export const CARD_KEYS = ['id', 'name', 'family', 'sex', 'race', 'age', 'look', 'nationId', 'settlementId', 'role', 'gearEra', 'traits', 'mood', 'possessedBy', 'parents', 'children', 'spouse', 'lover', 'lifespan', 'deathCause', 'dressed', 'work'];
+export const CARD_KEYS = ['id', 'name', 'family', 'sex', 'race', 'age', 'look', 'nationId', 'settlementId', 'role', 'gearEra', 'traits', 'mood', 'possessedBy', 'parents', 'children', 'spouse', 'lover', 'lifespan', 'deathCause', 'dressed', 'work', 'tools', 'toolOut'];
 
 export function pawnCard(p) { const c = {}; for (const k of CARD_KEYS) c[k] = p[k]; c.fx = p.fx; return c; }
 export function pawnFast(p) {

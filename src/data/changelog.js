@@ -2,6 +2,17 @@
 // tags: 'new' | 'improved' | 'fixed' | 'balance'
 export const CHANGELOG = [
   {
+    version: '0.7.2', date: '2026-11-27', title: 'Tools, crafting benches and a more varied people',
+    notes: [
+      ['new', 'Personal tools and weapons: everyone carries their own kit of axes, pickaxes, swords, fishing rods, shovels and sickles, in wood, stone, iron or gold. Tools make their work much faster (chopping, mining, building, sowing, harvesting, fishing), swords hit harder in fights and hunts, and every tool wears out and breaks with use.'],
+      ['new', 'Crafting Bench: an early building where crafters (or anyone, when nobody else can) make tools for whoever lacks them. Wood is cheap and quick to wear out, stone is the early workhorse, iron (after Iron Working, from iron ore) is the best, and gold is fast but soft. Finished tools go on the store shelf and people fetch upgrades for their trade.'],
+      ['new', 'You can see the kit: people hold the actual tool they are using, fishers cast a line with a bobbing float, and the citizen window\'s Gear tab lists each tool with its wear.'],
+      ['improved', 'Much more varied people: shirts, trousers, bodices, corsets, dresses, skirts, socks and boots are mixed and matched independently, linen is dyed in earthy tones early and bright colours later, and there are more hats, caps, gloves, face paint, packs and hairstyles.'],
+      ['fixed', 'Backpacks are drawn behind the body instead of over it.'],
+      ['improved', 'Hair mixes and matches too: any hairstyle can now come in any hair colour (black, browns, auburn, ginger, blonde, platinum, and the rare blue, pink or green), following each person\'s inherited hair colour, and people go grey with age.'],
+    ],
+  },
+  {
     version: '0.7.1', date: '2026-11-27', title: 'Orders, the divine hand and living characters',
     notes: [
       ['new', 'Orders replace the Possess button on the left (key Y): pick Fight, Chop, Mine, Hunt, Deconstruct or Destroy and click a target, and your best-suited people go and do it. Chopping and mining work through the whole grove or vein around the spot, carrying loads home between trips. Deconstructing returns half the materials; you can only destroy enemy buildings when at war. Possessing still works from a citizen\'s window or the F key.'],
@@ -10,6 +21,11 @@ export const CHANGELOG = [
       ['fixed', 'Knocked-over and killed people no longer turn back into the old sprites while they tumble: the ragdoll now uses the new character art.'],
       ['fixed', 'Half-zoomed-out views no longer show hard cut edges at the poles or overlapping map layers while blending into the globe.'],
       ['fixed', 'Windows now open in free space and never cover the Stores list, the toolbar, the power bar or each other.'],
+      ['fixed', 'Scrolling inside the Civilization Book and other windows no longer jumps back to the top when the window refreshes.'],
+      ['improved', 'The book\'s paper animation plays once per page: the first time you open the book and the first time you visit each chapter.'],
+      ['improved', 'No more ragdolls: knocked-over people hop, fall and get back up using their own character animations, and the dead collapse with a proper death animation.'],
+      ['balance', 'New peoples start with almost nothing, just a few handfuls of berries, and must gather everything else. New towns only get what their settlers carry over from the old one.'],
+      ['fixed', 'People no longer carry a basket around forever: they empty it at the store before taking new work, and a load that goes undelivered is set down for the haulers.'],
     ],
   },
   {
