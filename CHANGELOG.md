@@ -2,6 +2,35 @@
 
 Also available in-game: **Main menu → What's New**.
 
+## v0.6.0 — Creeds, bigger worlds, 31 new powers and a new Codex (2026-11-27)
+
+- **New:** Creeds replace Divine Will: every nation holds a few Ideals (Spiritual, Pacifist, Industrialist, Stewardship...), six Precepts (war, toil, land, the dead, outsiders, knowledge) and rites it performs on its own. Certainty rises and falls with prophets, temples and happiness; low certainty brings doubt, conversion to rival creeds, or a schism. Revelation restores certainty and lets you reform at once.
+- **Improved:** The Nation window is larger and the Creed & Will tab is laid out with ideal cards, precept selectors, rituals and tendency bars.
+- **New:** 31 new powers across every tab: Benediction, Gift of Tongues, Consecration, Great Awakening, Grove of Life, Rainbow, Wetland, Oasis, Vigor, Muse, Manna, Wild Boar, Camels, Elephants, Woolly Mammoth, War Horn, Thunderclap, Holy Wrath, Nightmares, Lightning Strike, Heat Wave, Cold Snap, Wildfire, Acid Rain, Madness, Raise Island, Flood, Earthquake, Meteor, Tsunami and Volcano. Each has its own icon.
+- **Balance:** New powers are priced between the old tiers (small gifts 14-30 Glitter, wonders 45-140, big disasters 240-330) and the heavy ones rest for 8-20 days. Harmful powers only touch wild land, your own land, or nations that granted you miracles; war powers only hurt people at war with you.
+- **Improved:** Co-op: every new power runs on the host like the rest, so the results (terrain, buildings, creatures, moods, cooldowns, Glitter) reach every player in sync.
+- **New:** Bigger worlds: Small, Normal, Large and Huge planets (up to 1536x768), with more starting nations as the planet grows.
+- **New:** World generation archetypes (Pangaea, archipelago, twin continents, ice age, water world, and more) with randomised ice caps, climate, rivers, lakes and volcanoes, so no two worlds look alike.
+- **Improved:** Coastlines are smoothed: shores curve in rounded bays and headlands with a sand and foam fringe instead of stair-steps where land meets water.
+- **Improved:** The Codex is rebuilt as a sidebar reference with icons, searchable cards and filters: Welcome, Powers (by tab and tier), Creeds, Traits, Races, Eras, Governments, World Ages, Biomes and Credits.
+
+## v0.5.0 — Mountains, new lands and moonlight (2026-11-27)
+
+- **New:** Mountain ranges: tall chunky peaks with snow caps rise out of the high ground, and hill-shading makes every slope, ridge and valley read at a glance across the whole map.
+- **New:** 10 new biomes: Steppe, Red Badlands, Blossom Grove, Autumn Woods, Temperate Rainforest, Mangrove Coast, Salt Flats, Alpine Meadow, Ashlands (around volcanic rifts) and Glowcap Fen. Each has its own ground art, trees, wildlife and resources.
+- **Improved:** Smarter world generation: warped coastlines, mountain chains that grow along ridge lines inland, foothills that step down from the peaks, island arcs off the continents, patchier biome regions and a smoothing pass that removes lone speckle tiles.
+- **Improved:** Land borders blend softly into each other instead of stair-stepping, and all trees are now recolours of the existing tree sprites (autumn reds, blossom pinks, redwood greens, frosted, ashen...).
+- **New:** Dynamic lighting: a golden-hour glow at sunrise and sunset, deep blue nights, flickering fires, and people carrying a little light after dark.
+- **New:** Possession actions: punch, swing, chop, mine, harvest and talk. Pick one with the action bar or keys 1-7, then press F or click. You never harm your own people or another deity's.
+- **New:** Cloud saves only list Ancestry World saves. Start with a founding pair (or a small family or full band) of a random race. Farm and Wild creature tabs, and a themed scrollbar on the power dock.
+- **Improved:** Pausing now freezes every animation. The zoom out to the planet is slower and ends with a planet-reveal animation, and the flat map is shown once instead of repeating.
+- **Fixed:** Removed stray dark dashes on the grass, half-cut bushes at chunk edges and the floating clotheslines.
+
+## v0.4.1 — Tidier clouds, less moon (2026-11-27)
+
+- **Fixed:** Cloud Saves now lists only Ancestry World saves. Files from other games that share the same Google Drive app folder are no longer shown.
+- **Improved:** The two distant grey planets behind the globe are recoloured (rusty desert world and glacial blue ice world) so they no longer look like the moon.
+
 ## v0.4.0 — Banners, clouds and a fresh coat of icons (2026-11-27)
 
 - **New:** Google sign-in and Cloud Saves (main menu): saves are copied into a private app folder in your own Google Drive, so you can pick up your worlds on any device. Auto-sync on every save/autosave, or upload/download/delete by hand.

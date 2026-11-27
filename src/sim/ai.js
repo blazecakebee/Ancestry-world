@@ -191,6 +191,22 @@ export function startInspiration(world, p, type) {
 }
 
 // ---------- possession (direct control by a player) ----------
+export const POSSESS_MODES = ['auto', 'punch', 'swing', 'chop', 'mine', 'harvest', 'talk'];
+const REACH = [[0.9, 0], [0.4, 0], [1.4, 0], [0.9, 0.9], [0.9, -0.9], [0, 0.9], [0, -0.9]];
+/** First tile with one of `feats` in reach of the possessed pawn (in front first). */
+function featInReach(world, p, feats) {
+  for (const [ox, oy] of REACH) {
+    const x = wrap(p.x + ox * p.facing, world.W), y = clamp(p.y + oy, 0, world.H - 1), i = tileIdx(world, x, y);
+    if (feats.includes(world.tiles.feat[i])) return i;
+  }
+  return -1;
+}
+/** A possessed person may only strike or befriend wild creatures, raiders and AI tribes: never their own people or another deity's. */
+function mayTouchPawn(world, p, q) {
+  if (!q || q.dead || q === p || q.nationId === p.nationId) return false;
+  const n = world.nations[q.nationId];
+  return !(n && n.ownerId && n.ownerId !== p.possessedBy);
+}
 function stepPossessed(world, p, dt, ctx) {
   const c = p.ctrl || {};
   p.job = null;
@@ -205,20 +221,47 @@ function stepPossessed(world, p, dt, ctx) {
     if (mx) p.facing = mx > 0 ? 1 : -1;
     p.moving = true; p.state = 'walk';
   } else p.state = 'idle';
-  if (c.act && (p._atk = (p._atk || 0) - dt) <= 0) {
-    p._atk = 0.025;
-    const fx = p.x + p.facing * 0.9, fy = p.y;
-    // attack nearest hostile creature or (explicitly targeted) pawn
-    const target = c.targetPawn ? world.pawns[c.targetPawn] : null;
-    const animal = Object.values(world.animals).find((a) => dist(a.x, a.y, fx, fy, world.W) < 1.6);
-    if (target && !target.dead) pawnAttack(world, p, target, ctx.rng);
-    else if (animal) pawnAttack(world, p, animal, ctx.rng);
-    else { // interact with the tile ahead: chop, mine, harvest
-      const i = tileIdx(world, fx, fy), t = world.tiles;
-      if ([F.TREE, F.ROCK, F.ORE, F.BERRY, F.CROP_READY, F.GOLD].includes(t.feat[i])) { harvestTile(world, p, i, ctx, 1); p.attackAnim = 1; p.state = 'work'; }
+  if (!c.act || (p._atk = (p._atk || 0) - dt) > 0) return;
+  const mode = POSSESS_MODES.includes(c.mode) ? c.mode : 'auto';
+  p._atk = mode === 'swing' ? 0.04 : mode === 'talk' ? 0.1 : 0.025;
+  const fx = p.x + p.facing * 0.9, fy = p.y;
+  const clicked = c.targetPawn ? world.pawns[c.targetPawn] : null;
+  const animalsNear = () => Object.values(world.animals).filter((a) => !a.dead && !ANIMALS[a.kind]?.noHunt && dist(a.x, a.y, fx, fy, world.W) < 1.6);
+  const gather = (feats, tool) => {
+    const i = featInReach(world, p, feats); if (i < 0) return false;
+    harvestTile(world, p, i, ctx, 1); p.attackAnim = 1; p.state = 'work'; p.tool = tool; return true;
+  };
+  const fight = () => {
+    const pawn = mayTouchPawn(world, p, clicked) ? clicked : null, animal = animalsNear()[0];
+    if (pawn) return pawnAttack(world, p, pawn, ctx.rng, mode === 'punch' ? { fists: true } : mode === 'swing' ? { melee: true } : {});
+    if (animal) return pawnAttack(world, p, animal, ctx.rng, mode === 'punch' ? { fists: true } : mode === 'swing' ? { melee: true } : {});
+    return false;
+  };
+  switch (mode) {
+    case 'punch': // quick, weak bare-handed jab at one target
+      if (!fight()) { p.attackAnim = 1; p.state = 'fight'; }
+      break;
+    case 'swing': { // slower weapon sweep that can catch several creatures at once
+      const hits = animalsNear().slice(0, 3);
+      if (mayTouchPawn(world, p, clicked)) pawnAttack(world, p, clicked, ctx.rng, { melee: true });
+      for (const a of hits) pawnAttack(world, p, a, ctx.rng, { melee: true });
+      p.attackAnim = 1; p.state = 'fight';
+      break;
     }
-    if (c.act === 'once') c.act = null;
+    case 'chop': gather([F.TREE], 'axe'); break;
+    case 'mine': gather([F.ROCK, F.ORE, F.GOLD], 'pick'); break;
+    case 'harvest': gather([F.BERRY, F.CROP_READY], 'hand'); break;
+    case 'talk': {
+      const q = mayTouchPawn(world, p, clicked) && dist(p.x, p.y, clicked.x, clicked.y, world.W) < 4 ? clicked
+        : pawnsNear(world, p.x, p.y, 3.2).filter((o) => mayTouchPawn(world, p, o) || (o !== p && !o.dead && o.nationId === p.nationId)).sort((a, b) => dist(a.x, a.y, p.x, p.y, world.W) - dist(b.x, b.y, p.x, p.y, world.W))[0];
+      if (q) { p.facing = dx(p.x, q.x, world.W) >= 0 ? 1 : -1; q.facing = -p.facing; socialInteraction(world, p, q, ctx.rng); p.state = 'idle'; }
+      break;
+    }
+    default: { // auto: fight what is there, else work the tile ahead
+      if (!fight()) { const i = featInReach(world, p, [F.TREE, F.ROCK, F.ORE, F.BERRY, F.CROP_READY, F.GOLD]); if (i >= 0) { harvestTile(world, p, i, ctx, 1); p.attackAnim = 1; p.state = 'work'; } }
+    }
   }
+  if (c.act === 'once') c.act = null;
 }
 
 // ---------- job selection ----------

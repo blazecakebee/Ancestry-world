@@ -6,14 +6,14 @@ import { emitFx } from './world.js';
 import { dist, dx } from '../core/util.js';
 
 export const ANIMALS = {
-  deer:     { name: 'Deer', hp: 40, dmg: 3, speed: 60, meat: 8, hide: 3, biomes: [4, 5, 6, 10], predator: false, size: 1 },
-  boar:     { name: 'Boar', hp: 55, dmg: 7, speed: 45, meat: 9, hide: 2, biomes: [5, 11, 12, 4], predator: false, fights: true, size: 0.9 },
-  wolf:     { name: 'Wolf', hp: 45, dmg: 9, speed: 62, meat: 5, hide: 3, biomes: [6, 7, 5], predator: true, size: 0.9 },
-  bear:     { name: 'Bear', hp: 110, dmg: 16, speed: 44, meat: 16, hide: 6, biomes: [5, 6, 13], predator: true, size: 1.4 },
-  camel:    { name: 'Camel', hp: 70, dmg: 4, speed: 40, meat: 12, hide: 4, biomes: [9, 10], predator: false, size: 1.3 },
-  elephant: { name: 'Elephant', hp: 220, dmg: 22, speed: 34, meat: 40, hide: 10, biomes: [10, 11], predator: false, fights: true, size: 2 },
-  mammoth:  { name: 'Mammoth', hp: 260, dmg: 24, speed: 32, meat: 50, hide: 14, biomes: [7, 6], predator: false, fights: true, size: 2.2, era0: true },
-  sheep:    { name: 'Wild Sheep', hp: 35, dmg: 2, speed: 40, meat: 6, hide: 5, biomes: [4, 13, 7], predator: false, size: 0.8 },
+  deer:     { name: 'Deer', hp: 40, dmg: 3, speed: 60, meat: 8, hide: 3, biomes: [4, 5, 6, 10, 18, 20, 21, 22, 25], predator: false, size: 1 },
+  boar:     { name: 'Boar', hp: 55, dmg: 7, speed: 45, meat: 9, hide: 2, biomes: [5, 11, 12, 4, 21, 22, 23], predator: false, fights: true, size: 0.9 },
+  wolf:     { name: 'Wolf', hp: 45, dmg: 9, speed: 62, meat: 5, hide: 3, biomes: [6, 7, 5, 18, 21, 25], predator: true, size: 0.9 },
+  bear:     { name: 'Bear', hp: 110, dmg: 16, speed: 44, meat: 16, hide: 6, biomes: [5, 6, 13, 21, 22, 25], predator: true, size: 1.4 },
+  camel:    { name: 'Camel', hp: 70, dmg: 4, speed: 40, meat: 12, hide: 4, biomes: [9, 10, 19, 24], predator: false, size: 1.3 },
+  elephant: { name: 'Elephant', hp: 220, dmg: 22, speed: 34, meat: 40, hide: 10, biomes: [10, 11, 18], predator: false, fights: true, size: 2 },
+  mammoth:  { name: 'Mammoth', hp: 260, dmg: 24, speed: 32, meat: 50, hide: 14, biomes: [7, 6, 18, 25], predator: false, fights: true, size: 2.2, era0: true },
+  sheep:    { name: 'Wild Sheep', hp: 35, dmg: 2, speed: 40, meat: 6, hide: 5, biomes: [4, 13, 7, 25, 18], predator: false, size: 0.8 },
   // Summoned-only kinds (empty biomes = never spawn naturally). friendly: never flees people; float: roams any land;
   // noHunt: hunters should leave it be; glitter: dropped for the killer's nation; fights: strikes back only when attacked.
   dog:      { name: 'Dog', hp: 40, dmg: 5, speed: 56, meat: 2, hide: 1, biomes: [], predator: false, friendly: true, noHunt: true, size: 0.7 },
@@ -40,10 +40,10 @@ export function weaponOf(world, p) {
 export function armorOf(world, p) { return eraOf(p.gearEra ?? 0).armor; }
 
 /** Pawn attacks a pawn or animal. Returns true when a blow was struck. */
-export function pawnAttack(world, p, target, rng) {
-  const w = weaponOf(world, p);
+export function pawnAttack(world, p, target, rng, opts = {}) {
+  const w = opts.fists ? { melee: 3, ranged: 0, range: 1.2 } : weaponOf(world, p); // opts.fists: bare-handed punch; opts.melee: never shoot
   const d = dist(p.x, p.y, target.x, target.y, world.W);
-  const ranged = w.ranged > 0 && d > 1.4 && p.role === 'soldier';
+  const ranged = !opts.fists && !opts.melee && w.ranged > 0 && d > 1.4 && p.role === 'soldier';
   if (!ranged && d > 1.4) return false;
   if (ranged && d > w.range) return false;
   const skill = ranged ? p.skills.shooting.lvl : p.skills.melee.lvl;

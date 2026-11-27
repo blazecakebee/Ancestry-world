@@ -26,6 +26,16 @@ const PAL = {
   [B.PEAK]: [[234, 236, 244], [246, 248, 252], [206, 210, 222]],
   [B.VOLCANIC]: [[66, 50, 50], [78, 60, 58], [54, 40, 40]],
   [B.ARCHIPELAGO]: [[140, 196, 96], [152, 208, 106], [124, 180, 84]],
+  [B.STEPPE]: [[176, 164, 98], [190, 178, 108], [160, 148, 86]],
+  [B.BADLANDS]: [[190, 110, 70], [204, 124, 80], [168, 94, 60]],
+  [B.BLOSSOM]: [[132, 176, 98], [146, 190, 108], [118, 160, 88]],
+  [B.AUTUMN]: [[142, 116, 58], [156, 128, 66], [126, 100, 50]],
+  [B.RAINFOREST]: [[40, 104, 76], [48, 118, 86], [32, 90, 64]],
+  [B.MANGROVE]: [[74, 122, 88], [84, 136, 98], [62, 106, 78]],
+  [B.SALTFLAT]: [[228, 228, 216], [238, 238, 228], [210, 210, 198]],
+  [B.ALPINE]: [[122, 164, 112], [134, 176, 122], [108, 148, 100]],
+  [B.ASHLAND]: [[98, 92, 88], [112, 106, 100], [84, 78, 74]],
+  [B.GLOWFEN]: [[62, 90, 112], [72, 104, 128], [52, 78, 98]],
 };
 
 /** Ground texture for a biome; water tiles have 4 animation frames. */
@@ -56,6 +66,16 @@ export function groundTile(biome, variant, frame = 0) {
         if (biome === B.FOREST) dots(6, [rgba(120, 90, 50), rgba(150, 110, 60)]);
         break;
       }
+      case B.STEPPE: for (let k = 0; k < 16; k++) { const x = r.int(0, TS - 1), y = r.int(2, TS - 1); b.set(x, y, light); b.set(x, y - 1, light); b.set(x + 1, y - 2, rgba(206, 194, 122)); } dots(3, [rgba(150, 120, 80)]); break;
+      case B.BADLANDS: for (let k = 0; k < 4; k++) { const y = r.int(0, TS - 1); b.rect(0, y, TS, 1, k % 2 ? dark : light); } dots(8, [rgba(150, 80, 50), rgba(214, 140, 96)]); break;
+      case B.BLOSSOM: for (let k = 0; k < 10; k++) { const x = r.int(1, TS - 2), y = r.int(2, TS - 1); b.set(x, y, dark); b.set(x, y - 1, dark); b.set(x + 1, y - 2, light); } dots(r.int(4, 9), [rgba(250, 190, 210), rgba(255, 230, 240), rgba(236, 140, 180)]); break;
+      case B.AUTUMN: dots(16, [rgba(196, 98, 38), rgba(214, 150, 50), rgba(120, 70, 40)], 2, 1); dots(6, [dark]); break;
+      case B.RAINFOREST: for (let k = 0; k < 20; k++) { const x = r.int(1, TS - 2), y = r.int(2, TS - 1); b.set(x, y, dark); b.set(x, y - 1, dark); b.set(x + 1, y - 2, light); } dots(5, [rgba(30, 70, 56), rgba(120, 150, 90)]); break;
+      case B.MANGROVE: for (let k = 0; k < 3; k++) b.ellipse(r.int(4, 28), r.int(4, 28), r.int(2, 5), r.int(1, 3), rgba(70, 120, 120)); dots(10, [dark, rgba(110, 90, 60)]); break;
+      case B.SALTFLAT: for (let k = 0; k < 6; k++) { const x = r.int(0, TS - 8), y = r.int(0, TS - 1); for (let i = 0; i < 7; i++) b.set(x + i, y + (i % 3 === 0 ? 1 : 0), rgba(196, 200, 196)); } dots(5, [rgba(250, 250, 244)]); break;
+      case B.ALPINE: for (let k = 0; k < 12; k++) { const x = r.int(1, TS - 2), y = r.int(2, TS - 1); b.set(x, y, dark); b.set(x, y - 1, dark); b.set(x + 1, y - 2, light); } dots(r.int(3, 6), [rgba(250, 240, 120), rgba(200, 160, 250), rgba(240, 240, 250)]); dots(3, [rgba(140, 140, 136)]); break;
+      case B.ASHLAND: dots(18, [rgba(70, 64, 62), rgba(130, 124, 118)]); dots(3, [rgba(210, 90, 40)]); break;
+      case B.GLOWFEN: for (let k = 0; k < 3; k++) b.ellipse(r.int(4, 28), r.int(4, 28), r.int(2, 4), r.int(1, 3), rgba(52, 80, 104)); dots(7, [rgba(120, 220, 230), rgba(190, 140, 250)]); dots(8, [dark]); break;
       case B.TAIGA: dots(14, [dark, rgba(60, 86, 66)]); dots(3, [rgba(130, 130, 124)]); break;
       case B.TUNDRA: dots(10, [rgba(170, 178, 160), rgba(120, 128, 108)]); dots(4, [rgba(184, 150, 96)]); break;
       case B.ICE: for (let k = 0; k < 3; k++) { let x = r.int(0, TS), y = r.int(0, TS); for (let i = 0; i < 10; i++) { b.set(x, y, rgba(190, 210, 228)); x += r.int(-1, 1); y += 1; } } dots(4, [rgba(255, 255, 255)]); break;
@@ -70,35 +90,34 @@ export function groundTile(biome, variant, frame = 0) {
 }
 export const biomeColor = (b) => PAL[b][0];
 
-// ---------- trees ----------
-export function treeSprite(kind, variant, snow = false) {
-  return get(`t${kind}|${variant}|${snow}`, () => {
-    const b = new PixBuf(32, 48), r = new RNG(kind.length * 101 + variant * 17);
-    const trunk = rgba(110, 78, 50), trunkD = rgba(82, 58, 38);
-    const leaf = { oak: [72, 140, 56], pine: [44, 104, 70], palm: [80, 168, 70], jungle: [36, 132, 56], acacia: [120, 150, 60], willow: [96, 138, 74], dead: [0, 0, 0], cactus: [78, 150, 82] }[kind] || [72, 140, 56];
-    const L = C(leaf), LD = shadeC(L, 0.72), LL = shadeC(L, 1.25);
-    const snowC = rgba(244, 248, 252);
-    if (kind === 'pine') {
-      b.rect(15, 38, 3, 9, trunk); b.vline(15, 38, 46, trunkD);
-      for (let t = 0; t < 4; t++) { const y0 = 8 + t * 8, w = 4 + t * 3; for (let y = 0; y < 10; y++) { const hw = Math.round((y / 10) * w) + 1; for (let x = -hw; x <= hw; x++) b.set(16 + x, y0 + y, x < -hw / 3 ? LD : x > hw / 2 ? LL : L); } if (snow) for (let x = -w / 2; x < w / 2; x++) b.set(16 + x, y0 + 3, snowC); }
-    } else if (kind === 'palm') {
-      for (let y = 18; y < 47; y++) { const x = 14 + Math.round(Math.sin(y / 9) * 2); b.set(x, y, trunk); b.set(x + 1, y, trunkD); if (y % 3 === 0) b.set(x, y, trunkD); }
-      for (const [dx, dy] of [[-10, 4], [10, 4], [-8, -2], [8, -2], [0, -6], [-12, 8], [12, 8]]) b.line(15, 16, 15 + dx, 16 + dy, L), b.line(15, 17, 15 + dx, 17 + dy + 1, LD);
-      b.ellipse(15, 18, 2, 2, rgba(120, 80, 40));
-    } else if (kind === 'cactus') {
-      b.rect(14, 22, 5, 25, L); b.vline(14, 22, 46, LD); b.vline(17, 22, 46, LL); b.rect(9, 28, 3, 8, L); b.rect(9, 34, 6, 3, L); b.rect(21, 25, 3, 9, L); b.rect(18, 32, 5, 3, L);
-      if (r.chance(0.5)) b.set(16, 21, rgba(240, 90, 140));
-    } else if (kind === 'dead') {
-      b.rect(15, 24, 3, 23, rgba(90, 80, 72)); b.line(16, 30, 9, 20, rgba(90, 80, 72)); b.line(16, 27, 23, 18, rgba(90, 80, 72)); b.line(11, 22, 8, 16, rgba(90, 80, 72));
-    } else {
-      b.rect(14, 30, 4, 17, trunk); b.vline(14, 30, 46, trunkD); b.set(13, 46, trunk); b.set(18, 46, trunk);
-      const blobs = kind === 'acacia' ? [[16, 18, 13, 5]] : kind === 'willow' ? [[16, 20, 11, 12]] : kind === 'jungle' ? [[16, 16, 12, 11], [9, 24, 6, 5], [23, 23, 6, 5]] : [[16, 18, 11, 10], [10, 24, 6, 5], [22, 24, 6, 5]];
-      for (const [cx, cy, rx, ry] of blobs) { const jx = r.int(-1, 1); b.ellipse(cx + jx, cy, rx, ry, L); b.ellipse(cx + jx + 2, cy + 2, rx - 2, ry - 2, LD); b.ellipse(cx + jx - 2, cy - 2, rx - 4, ry - 4, L); b.ellipse(cx + jx - 3, cy - 4, Math.max(2, rx - 7), Math.max(2, ry - 7), LL); }
-      if (kind === 'willow') for (let x = 6; x < 27; x += 3) b.vline(x, 24, 33 + r.int(0, 4), LD);
-      if (kind === 'oak' && r.chance(0.3)) for (let k = 0; k < 4; k++) b.set(r.int(9, 23), r.int(12, 26), rgba(220, 60, 60));
-      if (snow) for (const [cx, cy, rx] of blobs) for (let x = -rx + 2; x < rx - 2; x++) b.set(cx + x, cy - (blobs[0][3]) + 1 + Math.abs(x) % 2, snowC);
+
+// ---------- mountains: chunky pixel peaks (light on the north-west face, dark on the south-east) ----------
+export function mountainSprite(variant, snowy) {
+  return get(`m${variant}|${snowy}`, () => {
+    const W = 96, H = 84, b = new PixBuf(W, H), r = new RNG(variant * 313 + 5);
+    const L = rgba(162, 150, 136), M = rgba(126, 114, 106), D = rgba(88, 80, 78), LL = rgba(184, 172, 156), DD = rgba(66, 60, 62);
+    const SN = rgba(244, 248, 255), SNS = rgba(196, 210, 232), base = H - 7;
+    const peaks = [
+      { cx: 22 + r.int(-4, 4), top: 34 + r.int(-4, 6), hw: 24 },
+      { cx: 74 + r.int(-4, 4), top: 30 + r.int(-4, 6), hw: 25 },
+      { cx: 47 + r.int(-5, 5), top: 5 + r.int(0, 8), hw: 36 },
+    ];
+    for (const pk of peaks) {
+      for (let y = pk.top; y <= base; y++) {
+        const t = (y - pk.top) / (base - pk.top), half = pk.hw * Math.pow(t, 0.85) + (hash2(y, pk.cx) - 0.5) * 3;
+        for (let x = Math.floor(pk.cx - half); x <= Math.ceil(pk.cx + half); x++) {
+          const side = x - pk.cx, n = hash2(x * 3 + pk.cx, y * 5);
+          let c = side < -half * 0.12 ? (n < 0.16 ? M : n > 0.9 ? LL : L) : (n < 0.2 ? DD : n > 0.82 ? M : D);
+          if ((x + y * 2 + pk.cx) % 7 === 0 && n < 0.5) c = side < 0 ? M : DD; // striations
+          const snowLine = pk.top + (base - pk.top) * (snowy ? 0.4 : 0.1) + (hash2(x, pk.top) - 0.5) * 6;
+          if (y < snowLine && (snowy || pk.top < 12)) c = side < -half * 0.1 ? SN : SNS;
+          b.set(x, y, c);
+        }
+      }
     }
-    b.outline(rgba(24, 30, 24), 0.3);
+    // foot shadow
+    for (let x = 6; x < W - 6; x++) if (hash2(x, 99) > 0.3) b.set(x, base + 1 + (hash2(x, 7) > 0.6 ? 1 : 0), rgba(40, 36, 44, 150));
+    b.outline(rgba(34, 28, 38), 0.2);
     return b.toCanvas();
   });
 }

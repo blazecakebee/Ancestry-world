@@ -22,12 +22,13 @@ import { showFlagEditor, showCodex, showSettings } from './menu.js';
 import { LW, LH, LPC_BAND } from '../render/lpc.js';
 import { PW, PH, DIR } from '../render/charpack.js';
 import { saveSettings } from './settings.js';
+import { creedPanel } from './creedui.js';
 import { FW, FH } from '../render/pawnart.js';
 
 const RES_ICON = { food: 'food', meals: 'meals', rations: 'rations', wood: 'wood', stone: 'stone', metal: 'metal', cloth: 'cloth', medicine: 'medicine' };
 const OVERLAYS = [['none', 'None', 'globe'], ['borders', 'Borders', 'flag'], ['ideology', 'Ideology', 'scroll'], ['glitter', 'Glitter devotion', 'glitter'], ['trade', 'Trade routes', 'map'], ['race', 'Races', 'users'], ['weather', 'Weather', 'storm'], ['wind', 'Wind', 'wind'], ['temperature', 'Temperature', 'sun'], ['pressure', 'Pressure', 'warning'], ['humidity', 'Humidity', 'rain'], ['pollution', 'Pollution', 'skull']];
 
-const POWER_CATS = [['divine', 'Divine', 'glitter'], ['nature', 'Nature', 'tree'], ['life', 'Life', 'heart'], ['creatures', 'Creatures', 'dove'], ['war', 'War', 'sword'], ['curses', 'Curses', 'skull'], ['world', 'World', 'globe']];
+const POWER_CATS = [['divine', 'Divine', 'glitter'], ['nature', 'Nature', 'tree'], ['life', 'Life', 'heart'], ['farm', 'Farm', 'wheat'], ['wild', 'Wild', 'dove'], ['war', 'War', 'sword'], ['curses', 'Curses', 'skull'], ['world', 'World', 'globe']];
 
 // Which log entries are important enough for a notification card (everything else stays in the Chronicle only).
 // Returns {sev: info|success|warning|danger, icon, title?} or null. `mine` = the event concerns my nation.
@@ -124,7 +125,8 @@ export class HUD {
     // ---- powers dock ----
     this.powerBar = h('div', { class: 'glass powerbar' });
     this.modeChip = h('div', { class: 'glass mode-chip hidden' });
-    this.root.append(h('div', { class: 'hud-bottom' }, this.powerBar), this.modeChip);
+    this.possessBar = h('div', { class: 'glass possess-bar hidden' });
+    this.root.append(h('div', { class: 'hud-bottom' }, this.powerBar), this.possessBar, this.modeChip);
     this.buildPowers();
     // ---- right: players + notifications ----
     this.playersEl = h('div', { class: 'glass players' });
@@ -148,7 +150,7 @@ export class HUD {
     const tier = n ? tierOf(n) : 1;
     this.powerEls = {};
     const catOf = (p) => (POWER_CATS.some((c) => c[0] === p.cat) ? p.cat : 'divine');
-    let cat = app.settings.powerCat;
+    let cat = app.settings.powerCat === 'creatures' ? 'farm' : app.settings.powerCat; // the old Creatures tab was split into Farm + Wild
     if (!POWER_CATS.some((c) => c[0] === cat)) cat = 'divine';
     const counts = {}; for (const p of POWERS) counts[catOf(p)] = (counts[catOf(p)] || 0) + 1;
     // hide empty categories (but always keep the selected one valid)
@@ -174,6 +176,17 @@ export class HUD {
     row.addEventListener('wheel', (e) => { if (e.deltaY && !e.deltaX) { row.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
     this.powerBar.replaceChildren(tabsEl, row);
     this.tierShown = tier;
+  }
+
+  /** Action bar shown while possessing someone: pick what F / clicking does. */
+  setPossessBar(on, mode, pick) {
+    const bar = this.possessBar; if (!bar) return;
+    bar.classList.toggle('hidden', !on);
+    const key = on ? mode : '';
+    if (!on || bar._mode === key) { if (!on) bar._mode = null; return; }
+    bar._mode = key;
+    const A = [['auto', 'possess', 'Auto', 'Does the obvious thing: fights what is in front of you, otherwise works the tile ahead.'], ['punch', 'hand', 'Punch', 'Quick bare-handed jabs. Weak, but fast.'], ['swing', 'sword', 'Swing', 'A weapon sweep that can hit several creatures at once.'], ['chop', 'wood', 'Chop', 'Fell trees for wood.'], ['mine', 'stone', 'Mine', 'Break rock, ore and gold.'], ['harvest', 'sickle', 'Harvest', 'Pick berries and ripe crops.'], ['talk', 'chat', 'Talk', 'Chat with someone nearby: lifts spirits and builds friendships. Click a person to talk to them.']];
+    bar.replaceChildren(...A.map(([id, icon, label, tip], k) => h('button', { class: `pact ${id === mode ? 'on' : ''}`, onclick: () => pick(id), tip: `<b>${label}</b> <span class="muted">· key ${k + 1}</span><br>${tip}` }, iconImg(icon, 2, 'px-icon sm'), h('span', {}, label), h('i', { class: 'k' }, String(k + 1)))));
   }
 
   setHTML(el, html) { if (el._h !== html) { el._h = html; el.innerHTML = html; } }
@@ -448,13 +461,7 @@ export class HUD {
         );
       }
       if (tab === 'will') {
-        add(content, h('p', { class: 'small muted' }, mine ? 'Set the direction your people\'s beliefs drift toward. Prophets speed it up; Ideological Revelation pushes it instantly.' : 'Their beliefs.'));
-        for (const ax of AXES) {
-          const v = n.ideology[ax.id], t = n.ideologyTarget?.[ax.id] ?? v;
-          add(content, h('div', { class: 'axis' }, h('span', { class: 'pole', tip: ax.negDesc }, ax.neg), h('div', { class: 'col', style: { gap: '2px' } },
-            h('div', { class: 'bar' }, h('i', { style: { width: `${(v + 100) / 2}%`, background: 'linear-gradient(90deg, var(--accent-2), var(--accent))' } })),
-            mine ? h('input', { type: 'range', min: -100, max: 100, value: Math.round(t), onchange: (e) => app.session.command({ type: 'ideologyTarget', target: { [ax.id]: +e.target.value } }) }) : null), h('span', { class: 'pole r', tip: ax.posDesc }, ax.pos)));
-        }
+        add(content, creedPanel(app, w, n, mine));
         if (mine) add(content, h('b', {}, 'Decrees'),
           h('div', { class: 'settings-grid' }, h('span', {}, 'Food rations'), h('select', { onchange: (e) => app.session.command({ type: 'decree', key: 'rations', value: e.target.value }) }, [['strict', 'Strict (save food, unhappy)'], ['normal', 'Normal'], ['generous', 'Generous (happy, hungry stores)']].map(([v, l]) => h('option', { value: v, selected: n.laws.rations === v }, l))),
             h('span', {}, 'National focus'), h('select', { onchange: (e) => app.session.command({ type: 'decree', key: 'focus', value: e.target.value }) }, [['balanced', 'Balanced'], ['food', 'Food & farming'], ['science', 'Science'], ['faith', 'Faith & worship'], ['military', 'Military'], ['build', 'Construction']].map(([v, l]) => h('option', { value: v, selected: n.laws.focus === v }, l))),
@@ -482,10 +489,10 @@ export class HUD {
         for (const pl of others) add(content, h('div', { class: 'card col' }, h('b', {}, pl.name), ...Object.entries(PERMS).map(([k, label]) => h('label', { class: 'row small' }, h('input', { type: 'checkbox', checked: !!n.perms?.[pl.id]?.[k], onchange: (e) => app.session.command({ type: 'perm', player: pl.id, key: k, value: e.target.checked }) }), label))));
       }
       const cmd = async (c) => { const r = await app.session.command(c); if (!r.ok) toast(r.msg || 'Refused', { sound: 'error' }); else if (r.msg) toast(r.msg); };
-      const tabList = [['overview', 'Overview'], ['will', mine ? 'Divine Will' : 'Beliefs'], ['diplo', 'Diplomacy']];
+      const tabList = [['overview', 'Overview'], ['will', mine ? 'Creed & Will' : 'Creed'], ['diplo', 'Diplomacy']];
       if (mine && app.session.mode !== 'single') tabList.push(['perms', 'Permissions']);
       return h('div', { class: 'col' }, tabs(tabList, tab, (t) => { tab = t; win.update(); }), content);
-    }, { x: 90, y: 90, w: 440, h: 600, icon: iconImg('flag') });
+    }, { x: 70, y: 60, w: 680, h: 780, icon: iconImg('flag') });
   }
 
   openSpace() {

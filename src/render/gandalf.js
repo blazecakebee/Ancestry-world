@@ -37,17 +37,62 @@ export function prop(key) { const fr = GA.man?.frames[key]; return fr ? rectOf(f
 /** Ground decoration pools by tone: 'g' green, 'a' autumn/dry, 's' snow. */
 export function nature(cat, tone, h) {
   const list = GA.man?.nature[cat]; if (!list) return null;
-  const pool = list.filter((r) => r[5] === tone); if (!pool.length) return null;
+  const pool = list.filter((r) => r[5] === tone && r[4] >= 3 && r[3] >= 3); if (!pool.length) return null; // skip the 1px-tall sliver sprites (they showed up as stray dark dashes)
   const r = pool[h % pool.length]; return rectOf(r[0], r.slice(1, 5));
 }
 
 // ---- trees: world size in px at zoom 1 (32px tiles). Anchor = bottom-centre of the trunk. ----
 const TS = { tree1: 0.34, tree2: 0.34, tree3: 0.34, tree4: 0.34, birch1: 0.5, birch2: 0.5, birch3: 0.5, flowering_tree: 0.5, large_pine_tree: 0.36, weeping_willow1: 0.3, weeping_willow2: 0.3, weeping_willow3: 0.3, bonsai: 0.5 };
 function whole(name, tone) { const e = g(name); const sc = TS[name] || 0.4; return e.ok ? { im: e.im, x: 0, y: 0, w: e.im.width, h: e.im.height, scale: sc, foot: 3 } : null; }
-/** Pick a tree sprite for a tile. kind comes from the biome, h is a stable per-tile hash. Returns null when no Gandalf art fits (caller falls back). */
+// ---- recoloured variants: every tree kind except the base oak/pine is one of the existing sprites with its colours shifted ----
+const TINT = new Map();
+function rgb2hsl(r, g, b) { r /= 255; g /= 255; b /= 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2; let h = 0, s = 0; if (mx !== mn) { const d = mx - mn; s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn); h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; } return [h, s, l]; }
+function hsl2rgb(h, s, l) { h = ((h % 360) + 360) % 360 / 360; if (!s) { const v = Math.round(l * 255); return [v, v, v]; } const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q, f = (t) => { t = (t + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; }; return [Math.round(f(h + 1 / 3) * 255), Math.round(f(h) * 255), Math.round(f(h - 1 / 3) * 255)]; }
+/** Copy of a sprite rect with hue/saturation/lightness adjusted: rec = {h: degrees, s: x, l: x, trunk: keep brown trunks as they are}. */
+function tinted(key, src, rec) {
+  if (!src) return null;
+  let e = TINT.get(key); if (e) return e;
+  const cv = document.createElement('canvas'); cv.width = src.w; cv.height = src.h; const cx = cv.getContext('2d', { willReadFrequently: true });
+  cx.drawImage(src.im, src.x, src.y, src.w, src.h, 0, 0, src.w, src.h);
+  const id = cx.getImageData(0, 0, src.w, src.h), d = id.data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] === 0) continue;
+    const [h, s, l] = rgb2hsl(d[i], d[i + 1], d[i + 2]);
+    if (rec.trunk !== false && s < 0.5 && h > 5 && h < 50 && l < 0.45) continue; // leave brown trunks/branches alone
+    const [r, g, b] = hsl2rgb(h + (rec.h || 0), Math.min(1, s * (rec.s ?? 1)), Math.min(1, l * (rec.l ?? 1)));
+    d[i] = r; d[i + 1] = g; d[i + 2] = b;
+  }
+  cx.putImageData(id, 0, 0);
+  e = { im: cv, x: 0, y: 0, w: src.w, h: src.h, scale: src.scale, foot: src.foot };
+  TINT.set(key, e); return e;
+}
+// kind -> [base sprites, recolour, scale multiplier]
+const VARIANTS = {
+  acacia:   [['tree1', 'tree2'], { h: -44, s: 0.8, l: 1.12 }, 0.9],
+  jungle:   [['tree1', 'tree2'], { h: 12, s: 1.25, l: 0.88 }, 1.1],
+  palm:     [['weeping_willow1', 'weeping_willow2', 'weeping_willow3'], { h: -18, s: 1.3, l: 1.2 }, 0.9],
+  mangrove: [['weeping_willow2', 'weeping_willow3'], { h: -8, s: 0.9, l: 0.9 }, 0.95],
+  cactus:   [['tree4'], { h: 28, s: 0.55, l: 1.05 }, 0.7],
+  dead:     [['tree4', 'tree3'], { h: -100, s: 0.12, l: 0.7 }, 0.85],
+  autumn:   [['tree1', 'tree2', 'tree3'], { h: -86, s: 1.3, l: 1.12 }, 1],
+  cherry:   [['flowering_tree'], { h: 232, s: 0.7, l: 1.5 }, 1],
+  redwood:  [['tree2', 'tree1'], { h: 8, s: 0.9, l: 0.7 }, 1.25],
+  frost:    [['tree4'], { h: 70, s: 0.5, l: 1.35 }, 1],
+  crimson:  [['tree2', 'flowering_tree'], { h: 170, s: 1.1, l: 0.95 }, 1],
+  glow:     [['weeping_willow1', 'tree3'], { h: 72, s: 1.1, l: 1.1 }, 0.95],
+  ash:      [['tree3', 'tree4'], { h: -90, s: 0.12, l: 0.62 }, 0.85],
+};
+function variantTree(kind, h) {
+  const v = VARIANTS[kind]; if (!v) return null;
+  const name = v[0][h % v[0].length], base = whole(name); if (!base) return null;
+  base.scale *= v[2];
+  return tinted(kind + '|' + name, base, v[1]) && { ...tinted(kind + '|' + name, base, v[1]), scale: base.scale };
+}
+/** Pick a tree sprite for a tile. kind comes from the biome, h is a stable per-tile hash. Returns null only while art is loading. */
 export function tree(kind, x, y, snowy, autumn = false) {
   if (!GA.ready) return null;
   const h = H(x, y), r = (h >>> 8) % 100;
+  if (snowy && kind !== 'pine' && kind !== 'oak') { const t = variantTree('frost', h); if (t) return t; }
   if (kind === 'oak') {
     if (snowy) return r < 70 ? whole('tree4') : pineOf('s', h);
     if (autumn && r < 55) return whole('tree3');
@@ -56,8 +101,7 @@ export function tree(kind, x, y, snowy, autumn = false) {
   }
   if (kind === 'pine') return pineOf(snowy ? 's' : (r < 65 ? 'g' : 'a'), h);
   if (kind === 'willow') return whole('weeping_willow' + (1 + (h % 3)));
-  if (kind === 'jungle') return r < 70 ? whole('tree1') : whole('tree2');
-  return null;
+  return variantTree(kind, h) || whole('tree1');
 }
 function pineOf(tone, h) {
   const list = (GA.man?.pines || []).filter((p) => (tone === 's' ? p[5] === 's' : p[5] === tone));

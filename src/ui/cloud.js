@@ -81,7 +81,8 @@ const small = (v) => String(v ?? '').slice(0, 60);
 
 export async function listCloud() {
   const r = await gfetch(`${API}/files?spaces=appDataFolder&pageSize=100&orderBy=modifiedTime desc&fields=files(id,name,modifiedTime,size,appProperties)`);
-  return (await r.json()).files || [];
+  // The appDataFolder is shared by every game using this Google client, so only keep Ancestry World's own saves.
+  return ((await r.json()).files || []).filter((f) => /^aw-.+\.json\.gz$/.test(f.name || '') && f.appProperties && f.appProperties.key);
 }
 /** Create or overwrite the cloud copy of a save. key = a stable id (e.g. the local save id). meta = the save's list metadata. */
 export async function pushSave(key, data, meta = {}) {

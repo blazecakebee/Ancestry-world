@@ -1,7 +1,7 @@
 // Main renderer. Seamless zoom: Surface (individual citizens) -> Regional map -> Planetary globe -> Outer space.
 import { BIOMES, B, F } from '../data/biomes.js';
 import { BUILDINGS } from '../data/buildings.js';
-import { groundTile, treeSprite, featureSprite, farmTile, roadTile, TS, biomeColor } from './tileart.js';
+import { groundTile, mountainSprite, featureSprite, farmTile, roadTile, TS, biomeColor } from './tileart.js';
 import { buildingSprite, scaffold, ROOF_PAD } from './buildart.js';
 import { animalSprite, flagCanvas, iconCanvas } from './miscart.js';
 import { pawnSheet, FW, FH } from './pawnart.js';
@@ -26,7 +26,7 @@ import { dateString } from '../sim/world.js';
 
 const CH = 16; // chunk size in tiles
 const ZOOM = { MIN: 0.35, MAX: 112, SURFACE: 10, GLOBE: 1.6, GLOBE_FULL: 1.15 };
-const TREE_KIND = { [B.FOREST]: 'oak', [B.PLAINS]: 'oak', [B.TAIGA]: 'pine', [B.TUNDRA]: 'pine', [B.MOUNTAIN]: 'pine', [B.JUNGLE]: 'jungle', [B.ARCHIPELAGO]: 'palm', [B.BEACH]: 'palm', [B.SAVANNA]: 'acacia', [B.SWAMP]: 'willow', [B.DESERT]: 'cactus', [B.VOLCANIC]: 'dead' };
+const TREE_KIND = Object.fromEntries(BIOMES.filter((b) => b.tk).map((b) => [b.id, b.tk]));
 
 function sh0g(r, p) { return r.sheets.size >= 0 && GCH.ready && ((r.settings.characterStyle || 'lpc') === 'lpc' || r.settings.characterStyle === 'gandalf'); }
 function loadGandalf0(r) { GAN.loadGandalf().then((ok) => { if (ok) r.chunks.clear(); }); }
@@ -69,15 +69,22 @@ export class Renderer {
 
   // ---------- coordinates ----------
   get mode() { const z = this.cam.zoom; return z >= ZOOM.SURFACE ? 'surface' : z >= ZOOM.GLOBE ? 'regional' : 'globe'; }
+  /** Horizontal centre used by the flat regional map. Once the whole map fits on screen it is shown once, centred, instead of repeating. */
+  viewX() {
+    const c = this.cam, W = this.world.W;
+    if (c.zoom >= ZOOM.SURFACE) return c.x;
+    const fit = this.W / W, u = clamp((c.zoom - fit * 0.85) / (fit * 0.2), 0, 1), f = 1 - u * u * (3 - 2 * u);
+    return f > 0 ? wrap(c.x + wdx(c.x, W / 2, W) * f, W) : c.x;
+  }
   worldToScreen = (x, y) => {
     const c = this.cam, W = this.world.W;
-    const ddx = wdx(c.x, x, W);
+    const ddx = wdx(this.viewX(), x, W);
     return [this.W / 2 + ddx * c.zoom, this.H / 2 + (y - c.y) * c.zoom];
   };
   screenToWorld(sx, sy) {
     const c = this.cam;
     if (this.mode === 'globe') return this.globePick(sx, sy);
-    return [wrap(c.x + (sx - this.W / 2) / c.zoom, this.world.W), c.y + (sy - this.H / 2) / c.zoom];
+    return [wrap(this.viewX() + (sx - this.W / 2) / c.zoom, this.world.W), c.y + (sy - this.H / 2) / c.zoom];
   }
   globeRadius() { return this.menuMode ? Math.min(this.W, this.H) * 0.3 : this.cam.zoom * this.world.H * 0.42; }
   globePick(sx, sy) {
@@ -90,6 +97,7 @@ export class Renderer {
   }
   zoomAt(factor, sx, sy) {
     const c = this.cam, before = this.mode !== 'globe' && this.settings.zoomToCursor ? this.screenToWorld(sx, sy) : null;
+    if (factor < 1 && c.tz < ZOOM.SURFACE * 1.2 && !this.menuMode) factor = Math.pow(factor, 0.55); // the last stretch out to the planet takes more scrolling
     c.tz = clamp(c.tz * factor, ZOOM.MIN, ZOOM.MAX);
     c.anchor = before ? { wx: before[0], wy: before[1], sx, sy } : null;
   }
@@ -174,21 +182,9 @@ export class Renderer {
       const i = y * W + wrap(x, W), b = t.biome[i];
       const variant = Math.floor(hash2(x, y) * 4);
       ctx.drawImage(groundTile(b, variant, 0), tx * px, ty * px, px, px);
-      // biome blending: speckle neighbour colours along edges
-      if (!BIOMES[b].water) for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const ny = y + oy; if (ny < 0 || ny >= w.H) continue;
-        const nb = t.biome[ny * W + wrap(x + ox, W)];
-        if (nb === b) continue;
-        if (BIOMES[nb].water) { ctx.fillStyle = 'rgba(240,226,180,0.55)'; }
-        else { const [r, g, bb] = biomeColor(nb); ctx.fillStyle = `rgb(${r},${g},${bb})`; }
-        const s = px / 16;
-        for (let k = 0; k < 6; k++) { const along = Math.floor(hash2(x * 7 + k, y * 3 + ox + oy * 5) * 15) * s, depth = Math.floor(hash2(x + k, y * 11 + k) * 3) * s;
-          const rx = ox === 1 ? (px - s - depth) : ox === -1 ? depth : along, ry = oy === 1 ? (px - s - depth) : oy === -1 ? depth : along;
-          ctx.fillRect(tx * px + rx, ty * px + ry, s * 2, s * 2); }
-      } else for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { // shoreline foam
-        const ny = y + oy; if (ny < 0 || ny >= w.H) continue;
-        if (!BIOMES[t.biome[ny * W + wrap(x + ox, W)]].water) { ctx.fillStyle = 'rgba(230,244,255,0.55)'; const s = px / 16; for (let k = 0; k < 5; k++) { const a = Math.floor(hash2(x * 13 + k, y) * 15) * s; ctx.fillRect(tx * px + (ox === 1 ? px - 2 * s : ox === -1 ? 0 : a), ty * px + (oy === 1 ? px - 2 * s : oy === -1 ? 0 : a), s * 2, s); } }
-      }
+      this.blendCoast(ctx, t, W, w.H, x, y, tx, ty, px, b);
+      if (!BIOMES[b].water) this.blendLand(ctx, t, W, w.H, x, y, tx, ty, px, b, variant);
+      if (!BIOMES[b].water) this.shadeRelief(ctx, t, W, w.H, x, y, tx, ty, px, b);
       if (t.river[i]) { ctx.fillStyle = '#4c8fcf'; ctx.fillRect(tx * px + px * 0.2, ty * px, px * 0.6, px); ctx.fillRect(tx * px, ty * px + px * 0.2, px, px * 0.6); ctx.fillStyle = '#7fb9e8'; ctx.fillRect(tx * px + px * 0.35, ty * px + px * 0.35, px * 0.12, px * 0.12); }
       const f = t.feat[i];
       const owner = t.owner[i] >= 0 ? w.nations[t.owner[i]] : null;
@@ -205,11 +201,95 @@ export class Renderer {
     if (!lod && GAN.GA.ready) this.decorateChunk(ctx, cx, cy, px);
     c.dirty = false; c.ready = true;
   }
+  /** Rounded, organic coastlines: land/water is a smooth field (bilinear between tile centres, weighted by how far each tile sits above or below sea level),
+   *  so convex corners get cut, concave corners fill in and the shore reads as a curve instead of a staircase. A thin sand and foam fringe follows the line. */
+  blendCoast(ctx, t, W, H, x, y, tx, ty, px, b) {
+    const isW = !!BIOMES[b].water;
+    // quick reject: only tiles touching the opposite class need work
+    let mixed = false;
+    for (let oy = -1; oy <= 1 && !mixed; oy++) for (let ox = -1; ox <= 1; ox++) {
+      const yy = y + oy; if (yy < 0 || yy >= H) continue;
+      if (!!BIOMES[t.biome[yy * W + wrap(x + ox, W)]].water !== isW) { mixed = true; break; }
+    }
+    if (!mixed) return;
+    const L = (xx, yy) => { yy = yy < 0 ? 0 : yy >= H ? H - 1 : yy; const i = yy * W + wrap(xx, W), wt = !!BIOMES[t.biome[i]].water, m = Math.min(1, 0.4 + Math.abs(t.height[i]) * 9); return wt ? -m : m; };
+    const S = px >= 32 ? 16 : 8, sz = px / S;
+    const near = (u, v, wantWater) => { // nearest tile of the wanted class around this tile, by distance from the cell
+      let best = -1, bd = 9;
+      for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+        const yy = y + oy; if (yy < 0 || yy >= H) continue;
+        const nb = t.biome[yy * W + wrap(x + ox, W)]; if (!!BIOMES[nb].water !== wantWater) continue;
+        const d = Math.hypot(u - (ox + 0.5), v - (oy + 0.5)); if (d < bd) { bd = d; best = nb; }
+      }
+      return best;
+    };
+    const c00 = [L(x - 1, y - 1), L(x, y - 1), L(x + 1, y - 1)], c10 = [L(x - 1, y), L(x, y), L(x + 1, y)], c20 = [L(x - 1, y + 1), L(x, y + 1), L(x + 1, y + 1)];
+    const grid = [c00, c10, c20];
+    const field = (u, v) => { // u,v in tile units, tile centre at (0.5,0.5) -> grid index 1
+      const gx = u + 0.5, gy = v + 0.5, x0 = Math.min(1, Math.max(0, Math.floor(gx))), y0 = Math.min(1, Math.max(0, Math.floor(gy)));
+      const fx = gx - x0, fy = gy - y0;
+      return (grid[y0][x0] * (1 - fx) + grid[y0][x0 + 1] * fx) * (1 - fy) + (grid[y0 + 1][x0] * (1 - fx) + grid[y0 + 1][x0 + 1] * fx) * fy;
+    };
+    const variant = Math.floor(hash2(x, y) * 4);
+    for (let sy = 0; sy < S; sy++) for (let sx = 0; sx < S; sx++) {
+      const u = (sx + 0.5) / S, v = (sy + 0.5) / S, gx = x * S + sx, gy = y * S + sy;
+      const f = field(u, v) + (hash2(gx, gy) - 0.5) * 0.16 + (hash2(gx >> 2, gy >> 2) - 0.5) * 0.12;
+      const cellWater = f < 0;
+      if (cellWater !== isW) {
+        const nb = near(u, v, cellWater); if (nb < 0) continue;
+        ctx.drawImage(groundTile(nb, variant, 0), sx * sz, sy * sz, sz, sz, tx * px + sx * sz, ty * px + sy * sz, sz, sz);
+      }
+      // fringe: damp sand on the land side, foam on the water side
+      const af = Math.abs(f);
+      if (af < 0.14) {
+        if (cellWater) { ctx.fillStyle = `rgba(232,246,255,${0.62 - af * 3})`; } else { ctx.fillStyle = `rgba(238,222,172,${0.5 - af * 2.4})`; }
+        ctx.fillRect(tx * px + sx * sz, ty * px + sy * sz, sz, sz);
+      }
+    }
+  }
+  /** Smooth, organic borders between neighbouring land biomes: each 1/8-tile cell votes between the nearby tiles' biomes with a little noise, and near-ties fade. */
+  blendLand(ctx, t, W, H, x, y, tx, ty, px, b, variant) {
+    let diff = false; const nbs = [];
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+      const yy = y + oy; let nb = -1;
+      if (yy >= 0 && yy < H) { nb = t.biome[yy * W + wrap(x + ox, W)]; if (BIOMES[nb].water) nb = -1; }
+      nbs.push(nb); if (nb >= 0 && nb !== b) diff = true;
+    }
+    if (!diff) return;
+    const S = 8, sz = px / S, sc = {};
+    for (let sy = 0; sy < S; sy++) for (let sx = 0; sx < S; sx++) {
+      const u = (sx + 0.5) / S, v = (sy + 0.5) / S, gx = x * S + sx, gy = y * S + sy;
+      const nz = (hash2(gx, gy) - 0.5) * 0.5 + (hash2(gx >> 1, gy >> 1) - 0.5) * 0.35;
+      for (const k in sc) delete sc[k];
+      let k = 0;
+      for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++, k++) {
+        const nb = nbs[k]; if (nb < 0) continue;
+        const d = Math.hypot(u - (ox + 0.5), v - (oy + 0.5)), wgt = Math.max(0, 1.3 - d);
+        sc[nb] = (sc[nb] || 0) + wgt * wgt * (1 + nz);
+      }
+      let best = b, bs = -1, second = -1, ss = -1;
+      for (const nb in sc) { const v2 = sc[nb]; if (v2 > bs) { second = best; ss = bs; bs = v2; best = +nb; } else if (v2 > ss) { ss = v2; second = +nb; } }
+      if (best !== b) ctx.drawImage(groundTile(best, variant, 0), sx * sz, sy * sz, sz, sz, tx * px + sx * sz, ty * px + sy * sz, sz, sz);
+      if (second >= 0 && second !== best && bs - ss < 0.1) { ctx.globalAlpha = 0.45; ctx.drawImage(groundTile(second, variant, 0), sx * sz, sy * sz, sz, sz, tx * px + sx * sz, ty * px + sy * sz, sz, sz); ctx.globalAlpha = 1; }
+    }
+  }
+  /** Hill-shading so higher ground reads as higher: light from the north-west, plus a faint tint per elevation band. */
+  shadeRelief(ctx, t, W, H, x, y, tx, ty, px, b) {
+    const hAt = (xx, yy) => t.height[clamp(yy, 0, H - 1) * W + wrap(xx, W)];
+    const h = hAt(x, y); if (h <= 0.02) return;
+    const slope = (hAt(x - 1, y - 1) + hAt(x - 1, y) * 0.5 + hAt(x, y - 1) * 0.5) - (hAt(x + 1, y + 1) + hAt(x + 1, y) * 0.5 + hAt(x, y + 1) * 0.5);
+    const a = clamp(slope * 2.2, -0.34, 0.34);
+    if (a > 0.015) { ctx.fillStyle = `rgba(255,248,225,${a * 0.75})`; ctx.fillRect(tx * px, ty * px, px, px); }
+    else if (a < -0.015) { ctx.fillStyle = `rgba(14,10,40,${-a * 0.85})`; ctx.fillRect(tx * px, ty * px, px, px); }
+    if (h > 0.2) { ctx.fillStyle = `rgba(30,24,50,${Math.min(0.12, (h - 0.2) * 0.12)})`; ctx.fillRect(tx * px, ty * px, px, px); }
+  }
   /** Scatter grass tufts, bushes, pebbles and boulders over open ground, tone chosen per biome. */
   decorateChunk(ctx, cx, cy, px) {
     const w = this.world, t = w.tiles, W = w.W, sc = px / 32;
-    const TONE = { [B.PLAINS]: 'g', [B.FOREST]: 'g', [B.JUNGLE]: 'g', [B.SWAMP]: 'g', [B.SAVANNA]: 'a', [B.DESERT]: 'a', [B.BEACH]: 'a', [B.TAIGA]: 's', [B.TUNDRA]: 's', [B.MOUNTAIN]: 's' };
-    const DENS = { [B.PLAINS]: 1.1, [B.FOREST]: 1.3, [B.JUNGLE]: 1.8, [B.SWAMP]: 1.2, [B.SAVANNA]: 0.8, [B.DESERT]: 0.25, [B.BEACH]: 0.1, [B.TAIGA]: 0.7, [B.TUNDRA]: 0.4, [B.MOUNTAIN]: 0.3 };
+    const TONE = { [B.PLAINS]: 'g', [B.FOREST]: 'g', [B.JUNGLE]: 'g', [B.SWAMP]: 'g', [B.SAVANNA]: 'a', [B.DESERT]: 'a', [B.BEACH]: 'a', [B.TAIGA]: 's', [B.TUNDRA]: 's', [B.MOUNTAIN]: 's',
+      [B.STEPPE]: 'a', [B.BADLANDS]: 'a', [B.BLOSSOM]: 'g', [B.AUTUMN]: 'a', [B.RAINFOREST]: 'g', [B.MANGROVE]: 'g', [B.ALPINE]: 'g', [B.GLOWFEN]: 'g', [B.ASHLAND]: 's' };
+    const DENS = { [B.PLAINS]: 1.1, [B.FOREST]: 1.3, [B.JUNGLE]: 1.8, [B.SWAMP]: 1.2, [B.SAVANNA]: 0.8, [B.DESERT]: 0.25, [B.BEACH]: 0.1, [B.TAIGA]: 0.7, [B.TUNDRA]: 0.4, [B.MOUNTAIN]: 0.3,
+      [B.STEPPE]: 0.7, [B.BADLANDS]: 0.2, [B.BLOSSOM]: 1.2, [B.AUTUMN]: 1.2, [B.RAINFOREST]: 1.7, [B.MANGROVE]: 0.9, [B.ALPINE]: 0.9, [B.GLOWFEN]: 1.0, [B.ASHLAND]: 0.25 };
     for (let ty = 0; ty < CH; ty++) for (let tx = 0; tx < CH; tx++) {
       const x = cx * CH + tx, y = cy * CH + ty; if (y < 0 || y >= w.H) continue;
       const i = y * W + wrap(x, W), b = t.biome[i], tone = TONE[b]; if (!tone || t.feat[i] || t.river[i] || t.burnt[i] > 120) continue;
@@ -220,7 +300,9 @@ export class Renderer {
         if ((cat === 'bigrock' || cat === 'pile') && b !== B.MOUNTAIN && hash2(x, y * 3 + k) < 0.7) continue;
         const sp = GAN.nature(cat, tone, h >> 3); if (!sp) continue;
         const dx = ((h >> 4) % 100) / 100 * (px - sp.w * sc), dy = ((h >> 9) % 100) / 100 * (px - sp.h * sc * 0.5);
-        ctx.drawImage(sp.im, sp.x, sp.y, sp.w, sp.h, tx * px + Math.max(0, dx), ty * px + Math.max(0, dy) + sp.h * sc * 0.3, sp.w * sc, sp.h * sc);
+        // keep the whole sprite inside this chunk's canvas, otherwise big bushes get sliced in half at chunk edges
+        const dw = sp.w * sc, dh = sp.h * sc, X = Math.min(CH * px - dw, tx * px + Math.max(0, dx)), Y = Math.min(CH * px - dh, ty * px + Math.max(0, dy) + dh * 0.3);
+        ctx.drawImage(sp.im, sp.x, sp.y, sp.w, sp.h, Math.max(0, X), Math.max(0, Y), dw, dh);
       }
     }
   }
@@ -228,28 +310,38 @@ export class Renderer {
   // ---------- frame ----------
   frame(dt, local) {
     const w = this.world; if (!w) return;
-    this.time += dt;
+    const adt = w.paused && !this.menuMode ? 0 : dt; // paused world = frozen animation (walk cycles, water, clouds, particles, ragdolls)
+    this.time += adt; this.rtime = (this.rtime || 0) + dt;
     this.chunkBudget = 6;
     const c = this.cam;
-    c.zoom += (c.tz - c.zoom) * Math.min(1, dt * (c.zoom < ZOOM.GLOBE * 4 ? 5 : 9));
+    // zooming out toward the planet is deliberately slow and cinematic; zooming back in stays snappy
+    const out = c.tz < c.zoom, rate = !out ? (c.zoom < ZOOM.GLOBE * 4 ? 5 : 9) : c.zoom >= ZOOM.SURFACE * 1.3 ? 9 : c.zoom > ZOOM.GLOBE * 4 ? 2.6 : 1.5;
+    c.zoom += (c.tz - c.zoom) * Math.min(1, dt * rate);
     if (Math.abs(c.tz - c.zoom) < 0.001) c.zoom = c.tz;
+    // planet reveal when the zoom reaches the full globe
+    if (!this.menuMode) {
+      const full = c.zoom <= ZOOM.GLOBE * 1.25;
+      if (full && !this._globeFull) { this._globeFull = true; this.reveal = { t: 0 }; }
+      else if (!full && c.zoom > ZOOM.GLOBE * 2) { this._globeFull = false; this.reveal = null; }
+      if (this.reveal && (this.reveal.t += dt) > 5) this.reveal = null;
+    }
     if (c.anchor && c.zoom >= ZOOM.GLOBE) { const a = c.anchor; c.x = wrap(a.wx - (a.sx - this.W / 2) / c.zoom, w.W); c.y = clamp(a.wy - (a.sy - this.H / 2) / c.zoom, 0, w.H); c.lat0 = clamp(Math.PI / 2 - (c.y / w.H) * Math.PI, -1.2, 1.2); if (c.zoom === c.tz) c.anchor = null; }
     // consume simulation fx
     for (const e of w.fx) { if (e.t > this.fxSeen || (e._seq && e._seq > (this.fxSeq || 0))) this.onFx(e); }
     if (w.fx.length) { this.fxSeen = w.fx[w.fx.length - 1].t; this.fxSeq = w.fx[w.fx.length - 1]._seq; }
-    this.fx.step(dt);
+    this.fx.step(adt);
     if (this.mapDirty) { this.mapCtx.putImageData(this.mapImg, 0, 0); this.mapDirty = false; }
-    if (this.ownerDirty && (this.time - (this._ownT || 0) > 0.5)) { this.refreshOwner(); this.ownerDirty = false; this._ownT = this.time; }
+    if (this.ownerDirty && (this.rtime - (this._ownT || 0) > 0.5)) { this.refreshOwner(); this.ownerDirty = false; this._ownT = this.rtime; }
 
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
     const shake = this.fx.shake;
-    if (shake) ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+    if (shake && !(w.paused && !this.menuMode)) ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
     const mode = this.mode;
     if (this.menuMode) { this.drawSpace(ctx); return; }
     const TB = ZOOM.GLOBE * 3.4, ga = this.menuMode ? 1 : c.zoom >= TB ? 0 : c.zoom <= ZOOM.GLOBE * 1.25 ? 1 : (() => { const u = (TB - c.zoom) / (TB - ZOOM.GLOBE * 1.25); return u * u * (3 - 2 * u); })();
-    if (mode === 'surface') this.drawSurface(ctx, dt, local);
+    if (mode === 'surface') this.drawSurface(ctx, adt, local);
     else if (mode === 'regional') this.drawRegional(ctx, 1);
     else this.drawSpace(ctx, false, 1);
     // regional -> globe: the flat map bends into the sphere (same px-per-tile at the centre, then the sphere swells to its final size)
@@ -350,8 +442,9 @@ export class Renderer {
     // ---- y-sorted sprites ----
     const list = [];
     for (let y = ty0; y <= ty1; y++) for (let x = tx0; x <= tx1; x++) {
-      const i = y * W + wrap(x, W);
+      const i = y * W + wrap(x, W), b = t.biome[i];
       if (t.feat[i] === F.TREE) list.push({ y: y + 0.95, k: 0, x, ty: y, i });
+      else if ((b === B.MOUNTAIN || b === B.PEAK) && T >= 8 && (wrap(x, W) + y * 3) % 2 === 0 && hash2(x * 3 + 1, y * 7) < 0.45 && !t.river[i]) list.push({ y: y + 0.9, k: 5, x, ty: y, i, snowy: b === B.PEAK || t.height[i] > 0.7 });
       if (t.fire[i]) list.push({ y: y + 0.99, k: 4, x, ty: y, i });
     }
     const seenB = new Set();
@@ -384,8 +477,10 @@ export class Renderer {
         const sway = Math.sin(this.time * 1.5 + e.x * 0.7 + e.ty) * windAt(a, e.x, e.ty)[0] * 0.02 * s;
         ctx.save(); ctx.translate(Math.round(sx + T / 2), Math.round(sy + T)); ctx.transform(1, 0, sway * 0.4, 1, 0, 0);
         if (gt) { const k = gt.scale * s; ctx.drawImage(gt.im, gt.x, gt.y, gt.w, gt.h, -gt.w * k / 2, -(gt.h - gt.foot) * k, gt.w * k, gt.h * k); }
-        else { const img = treeSprite(kind, variant, snowy); ctx.drawImage(img, -24 * s, -69 * s, 48 * s, 72 * s); }
         ctx.restore();
+      } else if (e.k === 5) { // mountain peak
+        const [sx, sy] = this.worldToScreen(e.x, e.ty), spr = mountainSprite((e.x * 5 + e.ty * 3) & 3, e.snowy), k = s * 1.05;
+        ctx.drawImage(spr, Math.round(sx + T / 2 - 48 * k), Math.round(sy + T - 78 * k), 96 * k, 84 * k);
       } else if (e.k === 1) this.drawBuilding(ctx, e.b, s);
       else if (e.k === 2) {
         const an = e.a, [sx, sy] = this.worldToScreen(an.x, an.y), sz = s * 1.5 * (ANIMALS[an.kind]?.size > 1.3 ? 1.25 : 1);
@@ -476,7 +571,6 @@ export class Renderer {
       temple: [['decor:statue', -0.02], ['decor:statue', 1.02]], workshop: [['decor:logpile', 0.02], ['decor:stump_axe', 0.93]], healer: [['decor:basket', 0.05], ['decor:bottles', 0.9]],
       barracks: [['decor:crates', 0.03], ['decor:barrel', 0.93]], mine: [['decor:crate_wide', 0.05]], research: [['decor:cauldron', 0.92]] }[b.type];
     if (set) for (const [k, fx] of set) this.drawProp(ctx, k, sx + Wd * fx, y, K);
-    if (b.type === 'hut' && era >= 2 && b.id % 3 === 0) this.drawProp(ctx, 'decor:clothesline', sx + Wd * 1.0, y, K * 0.8);
     if (b.type === 'hut' && era >= 1 && b.id % 4 === 1) this.drawProp(ctx, 'decor:pumpkins', sx + Wd * 0.05, y, K * 0.9);
     if (b.type === 'kitchen') { const fr = GAN.gridFrame('cooking_area', Math.floor(this.time * 7)); if (fr) ctx.drawImage(fr.im, fr.x, fr.y, 64, 64, sx - 8 * s, sy - 60 * s * 1.1 + 4 * s, 64 * s * 1.1, 64 * s * 1.1); }
     if (b.type === 'workshop' && era >= 1) { const fr = GAN.gridFrame('furnace_and_sawmill', Math.floor(this.time * 6) % 6); if (fr) ctx.drawImage(fr.im, fr.x, fr.y, 64, 64, sx + Wd - 40 * s, sy - 58 * s * 1.15 + 4 * s, 64 * s * 1.15, 64 * s * 1.15); }
@@ -683,6 +777,9 @@ export class Renderer {
     let dark = clamp(0.62 - cz * 2.4, 0, 0.62);
     if (w.age?.id === 'dark') dark = Math.min(0.7, dark + 0.12);
     this.darkness = dark;
+    // golden hour: warm low-sun wash around sunrise and sunset, fading to plain daylight and then to night
+    const gold = Math.max(0, 1 - Math.abs(cz - 0.1) / 0.32) * (w.age?.id === 'dark' ? 0.4 : 1);
+    if (gold > 0.02) { ctx.fillStyle = `rgba(255,140,56,${gold * 0.2})`; ctx.fillRect(0, 0, this.W, this.H); }
     if (dark < 0.03) return;
     if (!this.nightCanvas || this.nightCanvas.width !== this.W || this.nightCanvas.height !== this.H) { this.nightCanvas = makeCanvas(this.W, this.H); this.nightCtx = this.nightCanvas.getContext('2d'); }
     const nc = this.nightCtx;
@@ -692,12 +789,16 @@ export class Renderer {
     nc.clearRect(0, 0, this.W, this.H); nc.fillStyle = `rgb(${tr},${tg},${tb})`; nc.fillRect(0, 0, this.W, this.H);
     nc.globalCompositeOperation = 'destination-out';
     const T = c.zoom;
-    const light = (x, y, r, a = 1) => { const [sx, sy] = this.worldToScreen(x, y); const g = nc.createRadialGradient(sx, sy, 0, sx, sy, r * T); g.addColorStop(0, `rgba(0,0,0,${a})`); g.addColorStop(1, 'rgba(0,0,0,0)'); nc.fillStyle = g; nc.fillRect(sx - r * T, sy - r * T, r * T * 2, r * T * 2); };
+    const fl = (x, y) => 1 + 0.07 * Math.sin(this.time * 11 + x * 3.1 + y * 1.7) + 0.04 * Math.sin(this.time * 23 + x);
+    const light = (x, y, r, a = 1) => { r *= fl(x, y); const [sx, sy] = this.worldToScreen(x, y); const g = nc.createRadialGradient(sx, sy, 0, sx, sy, r * T); g.addColorStop(0, `rgba(0,0,0,${a})`); g.addColorStop(1, 'rgba(0,0,0,0)'); nc.fillStyle = g; nc.fillRect(sx - r * T, sy - r * T, r * T * 2, r * T * 2); };
     for (const e of list) {
       if (e.k === 1 && e.b.built) { const b = e.b; const r = b.type === 'campfire' ? 4 : b.type === 'center' ? 5 : (b.era >= 6 ? 3.5 : 2.2); light(b.x + b.w / 2, b.y + b.h * 0.7, r, b.type === 'campfire' || b.type === 'center' ? 0.95 : 0.7); }
       if (e.k === 4) light(e.x + 0.5, e.ty + 0.5, 3, 0.9);
     }
     for (const r of this.fx.rings) light(r.x, r.y, 6, 0.8);
+    // people carry a little light after dark; wildfires and burning ground light their surroundings
+    if (dark > 0.25) for (const e of list) if (e.k === 3 && !e.p.dead && e.p.state !== 'sleep') light(e.p.rx ?? e.p.x, (e.p.ry ?? e.p.y) - 0.4, 1.7, 0.5);
+    { let n = 0; for (const fi of w.fireActive || []) { if (n++ > 80) break; const fx = fi % w.W, fy = (fi / w.W) | 0, d = wdx(c.x, fx, w.W); if (Math.abs(d) < this.W / 2 / T + 4 && Math.abs(fy - c.y) < this.H / 2 / T + 4) light(fx + 0.5, fy + 0.5, 3.2, 0.9); } }
     ctx.globalCompositeOperation = 'multiply';
     ctx.drawImage(this.nightCanvas, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
@@ -733,9 +834,10 @@ export class Renderer {
   drawRegional(ctx, alpha = 1, overlayOnly = false) {
     const w = this.world, c = this.cam, T = c.zoom, W = w.W;
     if (!overlayOnly) { ctx.fillStyle = '#0b0f1f'; ctx.fillRect(0, 0, this.W, this.H); }
-    const sx0 = this.W / 2 - c.x * T, sy0 = this.H / 2 - c.y * T;
+    const sy0 = this.H / 2 - c.y * T;
     ctx.imageSmoothingEnabled = false;
-    for (let k = -1; k <= 1; k++) {
+    const sx0 = this.W / 2 - this.viewX() * T, single = W * T <= this.W * 1.02 && T < ZOOM.SURFACE, ks = single ? [0] : [-1, 0, 1];
+    for (const k of ks) {
       const sx = sx0 + k * W * T; if (sx > this.W || sx + W * T < 0) continue;
       ctx.drawImage(this.mapCanvas, sx, sy0, W * T, w.H * T);
       if (this.overlay !== 'weather' && this.overlay !== 'wind') ctx.drawImage(this.ownCanvas, sx, sy0, W * T, w.H * T);
@@ -747,7 +849,7 @@ export class Renderer {
       for (let i = 0; i < a.G; i++) { const al = Math.max(0, a.cloud[i] - 0.2) * 255 * 0.8; d[i] = (Math.min(200, al | 0) << 24) | 0xfaf6f2; }
       this.cloudCtx.putImageData(img, 0, 0);
       ctx.save(); ctx.imageSmoothingEnabled = true; ctx.globalAlpha *= 0.65;
-      for (let k = -1; k <= 1; k++) ctx.drawImage(this.cloudCanvas, sx0 + k * W * T - CS * T / 2, sy0 - CS * T / 2, a.GW * CS * T, a.GH * CS * T);
+      for (const k of ks) ctx.drawImage(this.cloudCanvas, sx0 + k * W * T - CS * T / 2, sy0 - CS * T / 2, a.GW * CS * T, a.GH * CS * T);
       ctx.restore();
       for (const v of a.vortices) { const [vx, vy] = this.worldToScreen(v.x * CS + CS / 2, v.y * CS + CS / 2); ctx.save(); ctx.translate(vx, vy); ctx.rotate(-this.time * 2 * (v.y < a.GH / 2 ? 1 : -1)); ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 3; for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.arc(0, 0, (v.r * CS * T) * 0.6, k * 2.1, k * 2.1 + 1.4); ctx.stroke(); } ctx.restore(); }
     }
@@ -828,7 +930,10 @@ export class Renderer {
     const CX = this.W / 2;
     const pxScale = Math.max(1, Math.round(R / 160));
     const D = clamp(Math.round((R * 2) / pxScale), 48, 420);
-    const lon0 = ((c.x + 0.5) / w.W) * 2 * Math.PI - Math.PI;
+    // planet reveal: when the zoom-out reaches the full globe the planet swings into view, spinning to a stop under a bloom of atmosphere
+    const rv = !this.menuMode && this.reveal ? this.reveal.t : -1, ru = rv < 0 ? 1 : Math.min(1, rv / 2.6), re = 1 - Math.pow(1 - ru, 3);
+    if (rv >= 0 && ru < 1) R *= 0.84 + 0.16 * re;
+    const lon0 = ((c.x + 0.5) / w.W) * 2 * Math.PI - Math.PI + (rv >= 0 ? (1 - re) * 2.4 : 0);
     if (!overlay) {
       // sun glow
       const g = ctx.createRadialGradient(this.W * 0.85, this.H * 0.15, 0, this.W * 0.85, this.H * 0.15, this.W * 0.3);
@@ -840,6 +945,13 @@ export class Renderer {
     const halo = ctx.createRadialGradient(CX, this.H / 2, R * 0.92, CX, this.H / 2, R * 1.12);
     halo.addColorStop(0, 'rgba(120,190,255,0.55)'); halo.addColorStop(1, 'rgba(120,190,255,0)');
     ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(CX, this.H / 2, R * 1.12, 0, 7); ctx.fill();
+    if (rv >= 0 && rv < 4) { // expanding bloom ring + soft glow while the planet arrives
+      const k = Math.min(1, rv / 3), a = (1 - k) * (1 - k);
+      const bloom = ctx.createRadialGradient(CX, this.H / 2, R * 0.95, CX, this.H / 2, R * (1.15 + 0.9 * k));
+      bloom.addColorStop(0, `rgba(150,215,255,${0.5 * a})`); bloom.addColorStop(0.5, `rgba(110,170,255,${0.18 * a})`); bloom.addColorStop(1, 'rgba(110,170,255,0)');
+      ctx.fillStyle = bloom; ctx.beginPath(); ctx.arc(CX, this.H / 2, R * (1.15 + 0.9 * k), 0, 7); ctx.fill();
+      ctx.strokeStyle = `rgba(190,230,255,${0.55 * a})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(CX, this.H / 2, R * (1.02 + 0.55 * k), 0, 7); ctx.stroke();
+    }
     const img = this.globe.render(w, this.mapBuf, this.ownBuf, lon0, c.lat0, D, { borders: this.overlay !== 'weather', clouds: true });
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(img, CX - R, this.H / 2 - R, R * 2, R * 2);
@@ -853,6 +965,15 @@ export class Renderer {
       const n = w.nations[st.nationId]; if (!n) continue;
       ctx.fillStyle = this.paletteColor(n.color); ctx.beginPath(); ctx.arc(CX + x, this.H / 2 - y, st.capital ? 4 : 3, 0, 7); ctx.fill();
       if (R > 260 && st.capital) { ctx.font = '600 11px system-ui'; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(n.name, CX + x, this.H / 2 - y - 8); }
+    }
+    if (rv >= 0 && rv < 5 && !overlay) { // title card: the world's name, fading in then out
+      const a = Math.min(1, Math.max(0, (rv - 0.5) / 0.8)) * Math.min(1, Math.max(0, (5 - rv) / 1));
+      if (a > 0) {
+        const fs = Math.max(18, Math.min(34, this.H * 0.045)), ty = Math.min(this.H - 40, this.H / 2 + R * 1.12 + fs * 1.4);
+        ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.shadowColor = 'rgba(120,190,255,0.9)'; ctx.shadowBlur = 14;
+        ctx.font = `700 ${fs}px system-ui`; ctx.fillStyle = '#eaf6ff'; ctx.fillText(String(w.name || 'Planet').toUpperCase().split('').join('\u200A'), CX, ty);
+        ctx.shadowBlur = 0; ctx.font = `500 ${Math.round(fs * 0.45)}px system-ui`; ctx.fillStyle = 'rgba(200,225,255,0.8)'; ctx.fillText('Drag to turn the planet · scroll in to return', CX, ty + fs * 0.85);
+      }
     }
     ctx.restore();
   }

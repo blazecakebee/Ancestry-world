@@ -1,5 +1,6 @@
 // World state: creation, lookups, territory, building placement, spatial hashing.
 import { RNG } from '../core/rng.js';
+import { initCreed } from './creed.js';
 import { generateWorld, findStartSites, tileLatLon } from '../world/worldgen.js';
 import { createAtmosphere } from '../world/atmosphere.js';
 import { BIOMES, F, B, isWater } from '../data/biomes.js';
@@ -12,7 +13,7 @@ import { RACES, RACE_IDS } from '../data/races.js';
 export const YEAR_LEN = 12; // days per year (4 seasons x 3 days)
 export const DAY_SECONDS = 30; // real seconds per in-game day at 1x speed
 
-export function createWorld({ seed, name = 'New Globe', W, H, aiNations = 5, players = [] } = {}) {
+export function createWorld({ seed, name = 'New Globe', W, H, aiNations = 5, players = [], founders = 2 } = {}) {
   seed = seed >>> 0 || ((Math.random() * 2 ** 31) | 0);
   const tiles = generateWorld(seed, W, H);
   const world = {
@@ -22,13 +23,14 @@ export function createWorld({ seed, name = 'New Globe', W, H, aiNations = 5, pla
     nextId: { nation: 1, settlement: 1, building: 1, animal: 1, event: 1 },
     players: {}, waterActive: new Set(), fireActive: new Set(), dirty: new Set(),
     age: { id: 'hope', start: 0, until: YEAR_LEN * 3 }, space: [], log: [], fx: [], rng: new RNG(seed ^ 0x51f0),
-    hot: new Set(), cameraHints: {},
+    hot: new Set(), cameraHints: {}, settings: { founders },
   };
   const sites = findStartSites(tiles, Math.max(players.length, 1) + aiNations + 2, seed);
   world.freeSites = sites.slice();
+  if (tiles.meta && name !== 'menu') logEvent(world, 'nation', `A ${tiles.meta.archetype} takes shape beneath the clouds.`);
   for (let k = 0; k < aiNations; k++) {
     const site = takeSite(world); if (!site) break;
-    foundNation(world, site, { ai: true });
+    foundNation(world, site, { ai: true, pop: founders });
   }
   return world;
 }
@@ -68,13 +70,14 @@ export function foundNation(world, site, { ai = true, ownerId = null, name, colo
   };
   for (const [k, v] of Object.entries(RACES[race].ideo)) n.ideology[k] = Math.max(-100, Math.min(100, n.ideology[k] + v));
   world.nations[id] = n;
+  initCreed(world, n, rng);
   const s = foundSettlement(world, n, site.x, site.y, true);
   // starting tribe
   const [lat] = tileLatLon(site.x, site.y, world.W, world.H);
   const region = Math.max(0, 1 - Math.abs(lat) / 1.1); // equatorial peoples skew darker skin tones
   const fam = [];
   for (let k = 0; k < pop; k++) {
-    const p = createPawn(rng, { lang, race, nationId: id, settlementId: s.id, x: site.x + rng.range(-2, 2), y: site.y + rng.range(-2, 2), age: k < 2 ? rng.range(30, 45) : k < 7 ? rng.range(18, 34) : rng.range(6, 14), region, sex: k < 6 ? (k % 2 ? 'f' : 'm') : undefined, era: 0 });
+    const p = createPawn(rng, { lang, race, nationId: id, settlementId: s.id, x: site.x + rng.range(-2, 2), y: site.y + rng.range(-2, 2), age: pop <= 2 ? rng.range(19, 26) : k < 2 ? rng.range(30, 45) : k < 7 ? rng.range(18, 34) : rng.range(6, 14), region, sex: k < 6 || pop <= 2 ? (k % 2 ? 'f' : 'm') : undefined, era: 0 });
     world.pawns[p.id] = p; fam.push(p);
   }
   // pair up a few couples

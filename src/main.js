@@ -17,7 +17,6 @@ import { canPlace } from './sim/world.js';
 import { Session } from './net/session.js';
 import { serializeWorld, deserializeWorld } from './net/serialize.js';
 import { powerById } from './data/powers.js';
-import { AXES } from './data/society.js';
 import { BUILDINGS } from './data/buildings.js';
 import { RACES } from './data/races.js';
 import { ERAS } from './data/eras.js';
@@ -28,7 +27,7 @@ import { wrap, clamp, dist } from './core/util.js';
 import { dateString } from './sim/world.js';
 import { CURRENT_VERSION } from './data/changelog.js';
 
-const SIZES = { small: [384, 192], normal: [512, 256], large: [768, 384] };
+const SIZES = { small: [512, 256], normal: [768, 384], large: [1024, 512], huge: [1536, 768] };
 
 class App {
   async boot() {
@@ -74,8 +73,8 @@ class App {
     this.setLoading('Raising continents…', 0.3);
     await new Promise((r) => setTimeout(r, 30));
     const [W, H] = SIZES[o.size] || SIZES.normal;
-    const world = createWorld({ seed: o.seed, name: o.name || 'New Globe', W, H, aiNations: o.ai });
-    world.settings = { peacefulAI: o.peacefulAI, hostOnlySpeed: o.hostOnlySpeed };
+    const world = createWorld({ seed: o.seed, name: o.name || 'New Globe', W, H, aiNations: o.ai, founders: o.founders ?? 2 });
+    world.settings = { ...world.settings, peacefulAI: o.peacefulAI, hostOnlySpeed: o.hostOnlySpeed };
     this.setLoading('Lighting the first fires…', 0.7);
     let session;
     try { session = o.multiplayer ? await Session.host(world, o.player, { maxPlayers: o.maxPlayers }) : Session.single(world, o.player); }
@@ -239,16 +238,17 @@ class App {
   armPower(id) {
     const P = powerById[id], n = this.session?.myNation; if (!P || !n) return;
     if (this.armed === id) { this.setTool('inspect'); return; }
-    if (P.target === 'self') return this.revelationDialog();
+    if (P.target === 'self') return this.castSelf(P);
     this.tool = 'power'; this.setArmed(id); setCursor('target'); this.updateModeChip();
   }
-  revelationDialog() {
-    const m = modal('Ideological Revelation', h('div', { class: 'col' }, h('p', { class: 'muted small' }, 'Push one belief of your people by 12 points.'), ...AXES.map((ax) => h('div', { class: 'row' }, h('button', { class: 'btn sm grow', onclick: () => go(ax.id, -1) }, '← ', ax.neg), h('button', { class: 'btn sm grow', onclick: () => go(ax.id, 1) }, ax.pos, ' →')))), { icon: iconImg('scroll'), width: '460px' });
-    const go = async (axis, dir) => { m.close(); const r = await this.session.command({ type: 'power', power: 'revelation', axis, dir }); r.ok ? audio.play('power', { power: 'revelation' }) : toast(r.msg, { sound: 'error' }); };
+  async castSelf(P) {
+    const r = await this.session.command({ type: 'power', power: P.id });
+    r.ok ? audio.play('power', { power: P.id }) : toast(r.msg, { sound: 'error' });
   }
   startPlacing(type) { this.tool = 'build'; this.buildType = type; setCursor('build'); this.updateModeChip(); }
   possessSelected() { if (this.selection?.type === 'pawn') this.possess(this.selection.id); else toast('Select one of your citizens first (Inspect tool), then Possess.'); }
-  async possess(pid) { const r = await this.session.command({ type: 'possess', pid }); if (!r.ok) return toast(r.msg, { sound: 'error' }); this.possessed = pid; setCursor('possess'); this.renderer.cam.tz = Math.max(this.renderer.cam.tz, 56); audio.play('power', { power: 'calm' }); this.updateModeChip(); }
+  setPossessMode(m) { this.possessMode = m; this.updateModeChip(); this._ctrlKey = null; audio.play('toggle'); }
+  async possess(pid) { const r = await this.session.command({ type: 'possess', pid }); if (!r.ok) return toast(r.msg, { sound: 'error' }); this.possessed = pid; this.possessMode = this.possessMode || 'auto'; setCursor('possess'); this.renderer.cam.tz = Math.max(this.renderer.cam.tz, 56); audio.play('power', { power: 'calm' }); this.updateModeChip(); }
   async release() { await this.session.command({ type: 'release' }); this.possessed = null; setCursor('pointer'); this.updateModeChip(); }
   togglePin(id) { const pins = this.renderer.pins; pins.has(id) ? pins.delete(id) : pins.add(id); audio.play('toggle'); }
   focusPawn(id) { const p = this.session.world.pawns[id]; if (!p) return; this.follow = id; this.renderer.focus(p.x, p.y, Math.max(this.renderer.cam.tz, 48)); this.selection = { type: 'pawn', id }; this.renderer.selection = this.selection; }
@@ -256,10 +256,11 @@ class App {
     const chip = this.hud?.modeChip; if (!chip) return;
     let text = null;
     const w = this.session.world;
-    if (this.possessed && w.pawns[this.possessed]) text = `Possessing ${w.pawns[this.possessed].name} — WASD move · F / click act · R release`;
+    if (this.possessed && w.pawns[this.possessed]) text = `Possessing ${w.pawns[this.possessed].name} — WASD move · 1-7 pick an action · F / click to use it · R release`;
     else if (this.tool === 'power' && this.armed) { const P = powerById[this.armed]; text = `${P.name}: click ${P.target === 'pawn' ? 'a citizen' : P.target === 'settlement' ? 'a settlement' : 'the land'}${P.id === 'tectonic' ? ' (Shift = lower)' : ''} · right-click to cancel`; }
     else if (this.tool === 'build') text = `Planning ${BUILDINGS[this.buildType] ? this.buildType : ''}: click inside your territory · right-click to cancel`;
     chip.classList.toggle('hidden', !text); if (text) chip.textContent = text;
+    this.hud.setPossessBar?.(!!(this.possessed && w.pawns[this.possessed]), this.possessMode || 'auto', (m) => this.setPossessMode(m));
   }
 
   // ---------- events → sound, toasts, auto-pause ----------
@@ -328,13 +329,14 @@ class App {
     cv.addEventListener('pointerup', (e) => {
       const d = drag; drag = null;
       if (!d || d.moved > 6) return;
-      if (e.button === 2) { this.setTool('inspect'); if (this.possessed) this.session.command({ type: 'ctrl', mx: 0, my: 0, act: 'once' }); return; }
+      if (e.button === 2) { this.setTool('inspect'); if (this.possessed) this.session.command({ type: 'ctrl', mx: 0, my: 0, act: 'once', mode: this.possessMode }); return; }
       if (e.button === 0) this.click(e.clientX * dpr(), e.clientY * dpr(), e.shiftKey);
     });
     addEventListener('keydown', (e) => {
       if (e.target.closest?.('input, textarea, select')) return;
       if (document.querySelector('.modal-back') && e.code !== 'Escape') return;
       this.keys.add(e.code);
+      if (this.possessed && /^Digit[1-7]$/.test(e.code)) { e.preventDefault(); return this.setPossessMode(['auto', 'punch', 'swing', 'chop', 'mine', 'harvest', 'talk'][+e.code.slice(5) - 1]); }
       const k = this.settings.keys, act = Object.keys(k).find((a) => k[a] === e.code);
       if (!act || !this.session) { if (e.code === 'Escape' && document.querySelector('.modal-back')) document.querySelector('.modal-back .x')?.click(); return; }
       if (['Space', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10'].includes(e.code)) e.preventDefault();
@@ -356,7 +358,7 @@ class App {
         case 'settings': return showSettings(this);
         case 'chat': e.preventDefault(); return this.hud.focusChat();
         case 'release': return this.possessed && this.release();
-        case 'possessAttack': return this.possessed && this.session.command({ type: 'ctrl', ...this.moveVec(), act: 'once' });
+        case 'possessAttack': return this.possessed && this.session.command({ type: 'ctrl', ...this.moveVec(), act: 'once', mode: this.possessMode });
         case 'pinSelected': return this.selection?.type === 'pawn' && this.togglePin(this.selection.id);
         case 'cancel': return this.setTool('inspect');
       }
@@ -421,7 +423,7 @@ class App {
     }
     if (this.possessed) { // attack / interact with what was clicked
       const target = hit.type === 'pawn' && hit.id !== this.possessed ? hit.id : null;
-      this.session.command({ type: 'ctrl', ...this.moveVec(), act: 'once', targetPawn: target });
+      this.session.command({ type: 'ctrl', ...this.moveVec(), act: 'once', mode: this.possessMode, targetPawn: target });
       return;
     }
     this.selection = hit; r.selection = hit;
@@ -450,8 +452,8 @@ class App {
         const p = w.pawns[this.possessed];
         if (!p || p.dead || (p.possessedBy && p.possessedBy !== s.pid)) { this.possessed = null; setCursor('pointer'); this.updateModeChip(); }
         else {
-          const mv = this.moveVec(), act = this.keys.has(this.settings.keys.possessAttack) ? 'hold' : null, key = `${mv.mx},${mv.my},${act}`;
-          if (key !== this._ctrlKey || t - (this._ctrlT || 0) > 400) { this._ctrlKey = key; this._ctrlT = t; s.command({ type: 'ctrl', ...mv, act }); }
+          const mv = this.moveVec(), act = this.keys.has(this.settings.keys.possessAttack) ? 'hold' : null, key = `${mv.mx},${mv.my},${act},${this.possessMode}`;
+          if (key !== this._ctrlKey || t - (this._ctrlT || 0) > 400) { this._ctrlKey = key; this._ctrlT = t; s.command({ type: 'ctrl', ...mv, act, mode: this.possessMode }); }
           r.cam.x = p.rx ?? p.x; r.cam.y = p.ry ?? p.y;
         }
       } else {

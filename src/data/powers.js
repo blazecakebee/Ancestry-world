@@ -2,7 +2,7 @@
 // Powers only ever affect YOUR nation's land/people, unowned wilds, or a nation that has
 // explicitly granted you the "miracles" permission. Enforced in sim/commands.js.
 // target: 'tile' | 'pawn' | 'settlement' | 'self'. cd = cooldown in in-game days. devotion = lifetime Glitter needed.
-// cat: palette tab ('divine'|'nature'|'life'|'creatures'|'war'|'curses'|'world'); color: cursor tint + radius preview;
+// cat: palette tab ('divine'|'nature'|'life'|'farm'|'wild'|'war'|'curses'|'world'); color: cursor tint + radius preview;
 // radius: brush size in tiles (pawn = 1, settlement/self = 0); icon: iconmaps key, or 'va:<stem>' skill-icon key.
 export const TIERS = [
   { tier: 1, name: 'Whispers', devotion: 0 },
@@ -21,7 +21,7 @@ const CORE = [
   { id: 'omen', name: 'Omen of Unity', tier: 1, cost: 25, cd: 4, target: 'settlement', cat: 'divine', color: '#e0c0ff', radius: 0, icon: 'eye', desc: 'A sign in the sky. +Mood and +stability for a settlement.' },
   // Tier 2
   { id: 'harvest', name: 'Golden Harvest', tier: 2, cost: 70, cd: 8, target: 'settlement', cat: 'nature', color: '#ffd34d', radius: 0, icon: 'wheat', desc: 'All fields of a settlement ripen at once.' },
-  { id: 'revelation', name: 'Ideological Revelation', tier: 2, cost: 90, cd: 10, target: 'self', cat: 'divine', color: '#c58cff', radius: 0, icon: 'scroll', desc: 'Push one ideological axis of your nation by 12 points.' },
+  { id: 'revelation', name: 'Ideological Revelation', tier: 2, cost: 90, cd: 10, target: 'self', cat: 'divine', color: '#c58cff', radius: 0, icon: 'scroll', desc: 'Restore your people\'s certainty in their creed (+30) and let them reform ideals and precepts at once.' },
   { id: 'ore', name: 'Ore Blessing', tier: 2, cost: 80, cd: 8, target: 'tile', cat: 'world', color: '#ffe9a0', radius: 2, icon: 'gem', desc: 'Raise a vein of blessed ore from the earth.' },
   { id: 'cure', name: 'Ward of Purity', tier: 2, cost: 75, cd: 8, target: 'settlement', cat: 'life', color: '#9fffcf', radius: 0, icon: 'flask', desc: 'Cure diseases and infections across a settlement.' },
   { id: 'valor', name: 'Blessing of Valor', tier: 2, cost: 60, cd: 6, target: 'settlement', cat: 'war', color: '#ff9a6a', radius: 0, icon: 'sword', desc: 'Soldiers of a settlement fight with divine courage for 2 days.' },
@@ -57,26 +57,26 @@ const NEW = [
   { id: 'sanctuary', name: 'Sanctuary Light', tier: 2, cost: 55, cd: 6, target: 'tile', cat: 'life', color: '#fff6c0', radius: 5, icon: 'rv:665', desc: 'A calm glow rests everyone nearby, eases wounds and shields them briefly.' },
   { id: 'feast', name: 'Divine Feast', tier: 2, cost: 60, cd: 8, target: 'settlement', cat: 'life', color: '#ffb347', radius: 0, icon: 'rv:494', desc: 'Fine meals appear in a settlement; everyone eats well.' },
   // ---- Creatures ----
-  { id: 'dog', name: 'Faithful Hounds', tier: 1, cost: 10, cd: 1, target: 'tile', cat: 'creatures', color: '#c8a070', radius: 3, icon: 'va:buff_11', desc: 'One or two friendly dogs appear.' },
-  { id: 'cat', name: 'Hearth Cats', tier: 1, cost: 8, cd: 1, target: 'tile', cat: 'creatures', color: '#e8b070', radius: 3, icon: 'rv:363', desc: 'One or two friendly cats appear.' },
-  { id: 'birds', name: 'Songbirds', tier: 1, cost: 8, cd: 1, target: 'tile', cat: 'creatures', color: '#9fd8ff', radius: 3, icon: 'va:buff_9', desc: 'A small flock of songbirds. Cheers nearby citizens.' },
-  { id: 'sheepflock', name: 'Flock of Sheep', tier: 1, cost: 16, cd: 2, target: 'tile', cat: 'creatures', color: '#f0f0e0', radius: 3, icon: 'va:buff_12', desc: 'Three to five sheep appear.' },
-  { id: 'deerherd', name: 'Deer Herd', tier: 1, cost: 18, cd: 2, target: 'tile', cat: 'creatures', color: '#c89868', radius: 3, icon: 'va:buff_15', desc: 'Three to five deer appear: good hunting.' },
-  { id: 'fishshoal', name: 'Shoal of Fish', tier: 1, cost: 14, cd: 2, target: 'tile', cat: 'creatures', color: '#6fc8ff', radius: 2, icon: 'rv:361', desc: 'Call fish to water near one of your settlements; the catch fills its larders.' },
-  { id: 'slime_green', name: 'Green Slime', tier: 1, cost: 12, cd: 1, target: 'tile', cat: 'creatures', color: '#62e06a', radius: 3, icon: 'rv:675', desc: 'Harmless-ish green slimes. Fight back only if attacked.' },
-  { id: 'slime_blue', name: 'Blue Slime', tier: 1, cost: 12, cd: 1, target: 'tile', cat: 'creatures', color: '#5fa8ff', radius: 3, icon: 'rv:596', desc: 'Calm blue slimes that shimmer in the sun.' },
-  { id: 'cows', name: 'Herd of Cows', tier: 1, cost: 20, cd: 3, target: 'tile', cat: 'creatures', color: '#e8e8e0', radius: 3, icon: 'va:buff_6', desc: 'Two or three gentle cows wander in.' },
-  { id: 'pigs', name: 'Sounder of Pigs', tier: 1, cost: 16, cd: 2, target: 'tile', cat: 'creatures', color: '#f0a0b0', radius: 3, icon: 'va:buff_5', desc: 'A few pigs snuffle into view.' },
-  { id: 'goats', name: 'Mountain Goats', tier: 1, cost: 16, cd: 2, target: 'tile', cat: 'creatures', color: '#d8d0c0', radius: 3, icon: 'va:buff_4', desc: 'Sure-footed goats appear.' },
-  { id: 'chickens', name: 'Flock of Chickens', tier: 1, cost: 12, cd: 2, target: 'tile', cat: 'creatures', color: '#e0a060', radius: 3, icon: 'rv:521', desc: 'Four to seven chickens scatter about.' },
-  { id: 'rabbits', name: 'Warren of Rabbits', tier: 1, cost: 12, cd: 2, target: 'tile', cat: 'creatures', color: '#b0a090', radius: 3, icon: 'va:buff_14', desc: 'Rabbits bound out of the grass.' },
-  { id: 'ducks', name: 'Paddling of Ducks', tier: 1, cost: 12, cd: 2, target: 'tile', cat: 'creatures', color: '#9cc8a8', radius: 3, icon: 'va:buff_7', desc: 'Three to six ducks waddle out, quacking.' },
-  { id: 'horses', name: 'Wild Horses', tier: 2, cost: 26, cd: 3, target: 'tile', cat: 'creatures', color: '#b08050', radius: 3, icon: 'rv:45', desc: 'Two to four horses gallop in.' },
-  { id: 'fox', name: 'Cunning Foxes', tier: 2, cost: 14, cd: 2, target: 'tile', cat: 'creatures', color: '#ff8a40', radius: 3, icon: 'va:buff_13', desc: 'One or two skittish foxes.' },
-  { id: 'slime_red', name: 'Red Slime', tier: 2, cost: 22, cd: 2, target: 'tile', cat: 'creatures', color: '#ff5a5a', radius: 3, icon: 'rv:129', desc: 'Warm, stubborn red slimes. Hit back a little harder when attacked.' },
-  { id: 'wisp', name: 'Wisp Spirit', tier: 2, cost: 35, cd: 4, target: 'tile', cat: 'creatures', color: '#bff0ff', radius: 3, icon: 'va:mana_replenish', desc: 'A drifting wisp that sheds glitter on those who catch it.' },
-  { id: 'wolfpack', name: 'Wolf Pack', tier: 2, cost: 40, cd: 5, target: 'tile', cat: 'creatures', color: '#9aa0b0', radius: 3, icon: 'va:buff_10', desc: 'Two or three wolves. They spare your own people.' },
-  { id: 'bear', name: 'Mountain Bear', tier: 2, cost: 55, cd: 6, target: 'tile', cat: 'creatures', color: '#8a6040', radius: 3, icon: 'va:buff_16', desc: 'A lone bear. It spares your own people.' },
+  { id: 'dog', name: 'Faithful Hounds', tier: 1, cost: 10, cd: 1, target: 'tile', cat: 'wild', color: '#c8a070', radius: 3, icon: 'va:buff_11', desc: 'One or two friendly dogs appear.' },
+  { id: 'cat', name: 'Hearth Cats', tier: 1, cost: 8, cd: 1, target: 'tile', cat: 'wild', color: '#e8b070', radius: 3, icon: 'rv:363', desc: 'One or two friendly cats appear.' },
+  { id: 'birds', name: 'Songbirds', tier: 1, cost: 8, cd: 1, target: 'tile', cat: 'wild', color: '#9fd8ff', radius: 3, icon: 'va:buff_9', desc: 'A small flock of songbirds. Cheers nearby citizens.' },
+  { id: 'sheepflock', name: 'Flock of Sheep', tier: 1, cost: 16, cd: 2, target: 'tile', cat: 'farm', color: '#f0f0e0', radius: 3, icon: 'va:buff_12', desc: 'Three to five sheep appear.' },
+  { id: 'deerherd', name: 'Deer Herd', tier: 1, cost: 18, cd: 2, target: 'tile', cat: 'wild', color: '#c89868', radius: 3, icon: 'va:buff_15', desc: 'Three to five deer appear: good hunting.' },
+  { id: 'fishshoal', name: 'Shoal of Fish', tier: 1, cost: 14, cd: 2, target: 'tile', cat: 'wild', color: '#6fc8ff', radius: 2, icon: 'rv:361', desc: 'Call fish to water near one of your settlements; the catch fills its larders.' },
+  { id: 'slime_green', name: 'Green Slime', tier: 1, cost: 12, cd: 1, target: 'tile', cat: 'wild', color: '#62e06a', radius: 3, icon: 'rv:675', desc: 'Harmless-ish green slimes. Fight back only if attacked.' },
+  { id: 'slime_blue', name: 'Blue Slime', tier: 1, cost: 12, cd: 1, target: 'tile', cat: 'wild', color: '#5fa8ff', radius: 3, icon: 'rv:596', desc: 'Calm blue slimes that shimmer in the sun.' },
+  { id: 'cows', name: 'Herd of Cows', tier: 1, cost: 20, cd: 3, target: 'tile', cat: 'farm', color: '#e8e8e0', radius: 3, icon: 'va:buff_6', desc: 'Two or three gentle cows wander in.' },
+  { id: 'pigs', name: 'Sounder of Pigs', tier: 1, cost: 16, cd: 2, target: 'tile', cat: 'farm', color: '#f0a0b0', radius: 3, icon: 'va:buff_5', desc: 'A few pigs snuffle into view.' },
+  { id: 'goats', name: 'Mountain Goats', tier: 1, cost: 16, cd: 2, target: 'tile', cat: 'farm', color: '#d8d0c0', radius: 3, icon: 'va:buff_4', desc: 'Sure-footed goats appear.' },
+  { id: 'chickens', name: 'Flock of Chickens', tier: 1, cost: 12, cd: 2, target: 'tile', cat: 'farm', color: '#e0a060', radius: 3, icon: 'rv:521', desc: 'Four to seven chickens scatter about.' },
+  { id: 'rabbits', name: 'Warren of Rabbits', tier: 1, cost: 12, cd: 2, target: 'tile', cat: 'farm', color: '#b0a090', radius: 3, icon: 'va:buff_14', desc: 'Rabbits bound out of the grass.' },
+  { id: 'ducks', name: 'Paddling of Ducks', tier: 1, cost: 12, cd: 2, target: 'tile', cat: 'farm', color: '#9cc8a8', radius: 3, icon: 'va:buff_7', desc: 'Three to six ducks waddle out, quacking.' },
+  { id: 'horses', name: 'Wild Horses', tier: 2, cost: 26, cd: 3, target: 'tile', cat: 'farm', color: '#b08050', radius: 3, icon: 'rv:45', desc: 'Two to four horses gallop in.' },
+  { id: 'fox', name: 'Cunning Foxes', tier: 2, cost: 14, cd: 2, target: 'tile', cat: 'wild', color: '#ff8a40', radius: 3, icon: 'va:buff_13', desc: 'One or two skittish foxes.' },
+  { id: 'slime_red', name: 'Red Slime', tier: 2, cost: 22, cd: 2, target: 'tile', cat: 'wild', color: '#ff5a5a', radius: 3, icon: 'rv:129', desc: 'Warm, stubborn red slimes. Hit back a little harder when attacked.' },
+  { id: 'wisp', name: 'Wisp Spirit', tier: 2, cost: 35, cd: 4, target: 'tile', cat: 'wild', color: '#bff0ff', radius: 3, icon: 'va:mana_replenish', desc: 'A drifting wisp that sheds glitter on those who catch it.' },
+  { id: 'wolfpack', name: 'Wolf Pack', tier: 2, cost: 40, cd: 5, target: 'tile', cat: 'wild', color: '#9aa0b0', radius: 3, icon: 'va:buff_10', desc: 'Two or three wolves. They spare your own people.' },
+  { id: 'bear', name: 'Mountain Bear', tier: 2, cost: 55, cd: 6, target: 'tile', cat: 'wild', color: '#8a6040', radius: 3, icon: 'va:buff_16', desc: 'A lone bear. It spares your own people.' },
   // ---- War ----
   { id: 'fervor', name: 'Battle Fervor', tier: 2, cost: 50, cd: 5, target: 'tile', cat: 'war', color: '#ff7a4a', radius: 5, icon: 'rv:156', desc: 'Everyone nearby fights harder for a day and a half.' },
   { id: 'aegis', name: 'Aegis Ward', tier: 2, cost: 55, cd: 6, target: 'tile', cat: 'war', color: '#7fb8ff', radius: 4, icon: 'rv:597', desc: 'Everyone nearby takes 35% less damage for a day and a half.' },
@@ -96,8 +96,51 @@ const NEW = [
   { id: 'meteorshower', name: 'Meteor Shower', tier: 3, cost: 300, cd: 24, target: 'tile', cat: 'world', color: '#ff8a4a', radius: 8, icon: 'va:fire_spell_2', desc: 'A few small meteors strike wild ground, leaving craters and ore.' },
 ];
 
-export const POWERS = [...CORE, ...NEW].sort((a, b) => a.tier - b.tier);
+// ---- v0.6 additions: inspired by the classic god-sim toolbox, tuned for a patron who nudges. Costs sit between the old
+// tiers (T1 ~10-30, T2 ~45-140, T3 ~240-330); heavier powers have long cooldowns. All obey the same permission rules.
+const MORE = [
+  // ---- Divine ----
+  { id: 'benediction', name: 'Benediction', tier: 1, cost: 20, cd: 3, target: 'pawn', cat: 'divine', color: '#fff0b0', radius: 1, icon: 'rv:670', desc: 'A warm blessing: lifts one citizen\'s mood, ends a mental break and eases their weariness.' },
+  { id: 'tongues', name: 'Gift of Tongues', tier: 1, cost: 24, cd: 4, target: 'settlement', cat: 'divine', color: '#ffd8a0', radius: 0, icon: 'at:chat', desc: 'Neighbours talk freely for a day: everyone in a settlement has a deep conversation.' },
+  { id: 'consecrate', name: 'Consecration', tier: 2, cost: 70, cd: 8, target: 'settlement', cat: 'divine', color: '#e8d0ff', radius: 0, icon: 'at:temple', desc: 'Hallow a settlement: +stability, +creed certainty, and everyone feels the sermon.' },
+  { id: 'unity', name: 'Great Awakening', tier: 3, cost: 240, cd: 15, target: 'self', cat: 'divine', color: '#ffe9ff', radius: 0, icon: 'va:buff_8', desc: 'Your whole nation is uplifted: mood, stability and certainty all surge.' },
+  // ---- Nature ----
+  { id: 'grove', name: 'Grove of Life', tier: 1, cost: 26, cd: 3, target: 'tile', cat: 'nature', color: '#4fb35a', radius: 4, icon: 'at:tree', desc: 'A dense stand of trees rises on fertile open ground.' },
+  { id: 'rainbow', name: 'Rainbow', tier: 1, cost: 20, cd: 4, target: 'tile', cat: 'nature', color: '#ffd0f0', radius: 8, icon: 'at:cloud', desc: 'A rainbow arcs overhead. Everyone nearby feels hopeful.' },
+  { id: 'wetland', name: 'Wetland', tier: 2, cost: 45, cd: 5, target: 'tile', cat: 'nature', color: '#5a9a6a', radius: 3, icon: 'va:buff_2', desc: 'Low ground softens into marsh, rich in life but hard to cross.' },
+  { id: 'oasis', name: 'Oasis', tier: 2, cost: 60, cd: 6, target: 'tile', cat: 'nature', color: '#5fe0c0', radius: 2, icon: 'rv:668', desc: 'A spring and palms rise from dry land (deserts, steppe, savanna).' },
+  // ---- Life ----
+  { id: 'vigor', name: 'Vigor', tier: 1, cost: 16, cd: 3, target: 'pawn', cat: 'life', color: '#ffc27f', radius: 1, icon: 'rv:441', desc: 'One citizen is fed, rested and quick on their feet for half a day.' },
+  { id: 'muse', name: 'Muse', tier: 1, cost: 22, cd: 4, target: 'pawn', cat: 'life', color: '#ffb0e8', radius: 1, icon: 'rv:296', desc: 'A flash of artistry: creative inspiration and artistic skill.' },
+  { id: 'manna', name: 'Manna', tier: 2, cost: 55, cd: 6, target: 'settlement', cat: 'life', color: '#fff0c0', radius: 0, icon: 'at:rations', desc: 'Bread falls from the sky: a generous gift of food to a settlement.' },
+  // ---- Wild ----
+  { id: 'boar', name: 'Wild Boar', tier: 1, cost: 14, cd: 1, target: 'tile', cat: 'wild', color: '#a0705a', radius: 3, icon: 'rv:233', desc: 'A few boars rooting in the undergrowth. Dangerous, but good hunting.' },
+  { id: 'camel', name: 'Camels', tier: 2, cost: 20, cd: 2, target: 'tile', cat: 'wild', color: '#d8b070', radius: 3, icon: 'rv:203', desc: 'Desert wanderers: tough, patient beasts of burden.' },
+  { id: 'elephant', name: 'Elephants', tier: 2, cost: 50, cd: 4, target: 'tile', cat: 'wild', color: '#b0b0b8', radius: 3, icon: 'rv:216', desc: 'A gentle giant or two. Mighty when angered.' },
+  { id: 'mammoth', name: 'Woolly Mammoth', tier: 2, cost: 60, cd: 5, target: 'tile', cat: 'wild', color: '#8a6a50', radius: 3, icon: 'rv:316', desc: 'Ice-age giants for the cold north.' },
+  // ---- War ----
+  { id: 'warhorn', name: 'War Horn', tier: 1, cost: 28, cd: 4, target: 'tile', cat: 'war', color: '#ffb060', radius: 6, icon: 'rv:126', desc: 'A horn call: allies nearby move faster and fight harder for a short while.' },
+  { id: 'thunderclap', name: 'Thunderclap', tier: 2, cost: 55, cd: 5, target: 'tile', cat: 'war', color: '#d0d8ff', radius: 3, icon: 'rv:178', desc: 'A deafening crack knocks back and unnerves enemies at war with you.' },
+  { id: 'wrath', name: 'Holy Wrath', tier: 2, cost: 70, cd: 8, target: 'tile', cat: 'war', color: '#ff6a5a', radius: 3, icon: 'at:angry', desc: 'Heavenly fire scorches beasts and enemies at war with you. Spares everyone else.' },
+  // ---- Curses (weak, wild or permitted land only) ----
+  { id: 'nightmares', name: 'Nightmares', tier: 1, cost: 26, cd: 3, target: 'pawn', cat: 'curses', color: '#5a4a8a', radius: 1, icon: 'at:moon', desc: 'One citizen is haunted: mood plunges and they hide away.' },
+  { id: 'lightning', name: 'Lightning Strike', tier: 1, cost: 28, cd: 2, target: 'tile', cat: 'curses', color: '#fff6a0', radius: 1, icon: 'at:warning', desc: 'A bolt from the blue: burns whoever stands there and may start a fire.' },
+  { id: 'heatwave', name: 'Heat Wave', tier: 2, cost: 55, cd: 5, target: 'tile', cat: 'curses', color: '#ff9a4a', radius: 8, icon: 'at:sun', desc: 'Scorching heat settles over the region; snow melts, people wilt.' },
+  { id: 'coldsnap', name: 'Cold Snap', tier: 2, cost: 55, cd: 5, target: 'tile', cat: 'curses', color: '#9ad0ff', radius: 8, icon: 'va:debuff_11', desc: 'A bitter freeze sweeps the region.' },
+  { id: 'wildfire', name: 'Wildfire', tier: 2, cost: 70, cd: 6, target: 'tile', cat: 'curses', color: '#ff7a3a', radius: 3, icon: 'rv:81', desc: 'Set a patch of ground alight. The wind decides the rest.' },
+  { id: 'acidrain', name: 'Acid Rain', tier: 2, cost: 80, cd: 8, target: 'tile', cat: 'curses', color: '#b0e050', radius: 3, icon: 'va:debuff_12', desc: 'Corrosive rain kills crops and trees, fouls the soil and burns the unsheltered.' },
+  { id: 'madness', name: 'Madness', tier: 2, cost: 65, cd: 6, target: 'pawn', cat: 'curses', color: '#c04a6a', radius: 1, icon: 'va:debuff_14', desc: 'One citizen goes berserk for a short while.' },
+  // ---- World ----
+  { id: 'isle', name: 'Raise Island', tier: 2, cost: 90, cd: 6, target: 'tile', cat: 'world', color: '#e8d890', radius: 3, icon: 'rv:41', desc: 'Lift a small island from the shallows or open sea.' },
+  { id: 'flood', name: 'Flood', tier: 2, cost: 65, cd: 6, target: 'tile', cat: 'world', color: '#5aa0e0', radius: 3, icon: 'at:storm', desc: 'Water spills over low ground, drowning crops and fields.' },
+  { id: 'earthquake', name: 'Earthquake', tier: 2, cost: 120, cd: 9, target: 'tile', cat: 'world', color: '#b08a60', radius: 4, icon: 'rv:210', desc: 'The ground shakes: some buildings fall, rubble litters the land, people are hurt.' },
+  { id: 'meteor', name: 'Meteor', tier: 2, cost: 140, cd: 8, target: 'tile', cat: 'world', color: '#ff8a4a', radius: 2, icon: 'rv:386', desc: 'One rock from the heavens. Needs clear ground with nobody nearby who has not permitted it.' },
+  { id: 'tsunami', name: 'Tsunami', tier: 3, cost: 280, cd: 16, target: 'tile', cat: 'world', color: '#4a8ad8', radius: 5, icon: 'at:wave', desc: 'A great wave floods the nearby low coast. Needs open water close by.' },
+  { id: 'volcano', name: 'Volcano', tier: 3, cost: 330, cd: 20, target: 'tile', cat: 'world', color: '#ff5a2a', radius: 3, icon: 'at:fire', desc: 'A volcano bursts through the ground, scorching the land around it into ashlands.' },
+];
+
+export const POWERS = [...CORE, ...NEW, ...MORE].sort((a, b) => a.tier - b.tier);
 export const POWER_CATS = [
-  ['divine', 'Divine'], ['nature', 'Nature'], ['life', 'Life'], ['creatures', 'Creatures'], ['war', 'War'], ['curses', 'Curses'], ['world', 'World'],
+  ['divine', 'Divine'], ['nature', 'Nature'], ['life', 'Life'], ['farm', 'Farm'], ['wild', 'Wild'], ['war', 'War'], ['curses', 'Curses'], ['world', 'World'],
 ];
 export const powerById = Object.fromEntries(POWERS.map((p) => [p.id, p]));

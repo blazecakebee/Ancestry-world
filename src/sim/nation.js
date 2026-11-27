@@ -10,6 +10,7 @@ import { tempAt } from '../world/atmosphere.js';
 import { scaledCost } from './ai.js';
 import { wrap, dist, clamp } from '../core/util.js';
 import { nationName } from '../data/names.js';
+import { creedFx, creedMood, stepCreed, forkCreed, hasCreed } from './creed.js';
 
 export function nationPawns(world, n) { return Object.values(world.pawns).filter((p) => p.nationId === n.id && !p.dead); }
 
@@ -17,10 +18,11 @@ export function nationPawns(world, n) { return Object.values(world.pawns).filter
 export function nationMults(world, n) {
   const gov = GOVERNMENTS.find((g) => g.id === n.government)?.fx || {};
   const age = world.age?.id;
+  const cf = creedFx(n);
   return {
-    researchMult: (1 + (gov.research || 0) + Math.max(0, n.ideology.faith) / 160) * (age === 'wonders' ? 1.3 : 1),
-    glitterMult: (1 + (gov.glitter || 0)) * (n.buffs?.glitterUntil > world.time ? 1.5 : 1),
-    moodBonus: (gov.mood || 0) + (n.ideology.war > 40 ? 3 : 0) + (age === 'hope' ? 6 : age === 'despair' ? -6 : 0),
+    researchMult: Math.max(0.3, (1 + (gov.research || 0) + cf.research + Math.max(0, n.ideology.faith) / 160) * (age === 'wonders' ? 1.3 : 1)),
+    glitterMult: Math.max(0.2, (1 + (gov.glitter || 0) + cf.glitter) * (n.buffs?.glitterUntil > world.time ? 1.5 : 1)),
+    moodBonus: (gov.mood || 0) + cf.mood + (hasCreed(n) ? creedMood(n) - (n.creed.doubt ? 4 : 0) : 0) + (age === 'hope' ? 6 : age === 'despair' ? -6 : 0),
   };
 }
 
@@ -188,17 +190,18 @@ export function stepNation(world, n, dt, rng) {
     const g = pickGovernment(n);
     if (g !== n.government && n.ai) reform(world, n, g);
   }
-  // ideology drifts toward the deity's will (players) or randomly (AI)
+  // beliefs drift toward what the creed's memes push for; prophets speed it up
   if (n.ideologyTarget) {
     const prophets = pawns.filter((p) => p.role === 'prophet').length;
     for (const ax of AXES) { const tv = n.ideologyTarget[ax.id]; if (tv === undefined) continue; const d = tv - n.ideology[ax.id]; n.ideology[ax.id] += clamp(d, -1, 1) * dt * (0.8 + prophets * 0.5); }
-  } else if (n.ai && rng.chance(dt * 0.3)) { const ax = rng.pick(AXES).id; n.ideology[ax] = clamp(n.ideology[ax] + rng.range(-6, 6), -100, 100); }
+  }
+  stepCreed(world, n, pawns, dt, rng);
   // leadership
   if (!world.pawns[n.leaderId] || world.pawns[n.leaderId].dead) succession(world, n, rng);
   // stability
   const avgMood = pawns.reduce((a, p) => a + p.mood, 0) / pawns.length;
   const gov = GOVERNMENTS.find((g) => g.id === n.government)?.fx || {};
-  n.stability = clamp(n.stability + ((avgMood - 40) * 0.08 + (gov.stability || 0) * 0.05 + (n.ideology.reach > 30 ? 0.3 : 0) - n.warWeary * 0.02) * dt, 0, 100);
+  n.stability = clamp(n.stability + ((avgMood - 40) * 0.08 + ((gov.stability || 0) + creedFx(n).stability - (n.creed?.doubt ? 8 : 0)) * 0.05 + (n.ideology.reach > 30 ? 0.3 : 0) - n.warWeary * 0.02) * dt, 0, 100);
   if (n.ai && rng.chance(dt * 0.05)) { const g = pickGovernment(n); if (g !== n.government) reform(world, n, g); }
   // roles: soldiers & prophets
   if ((n._roles = (n._roles || 0) + dt) > 1) { n._roles = 0; assignRoles(world, n, pawns, rng); }
@@ -237,7 +240,7 @@ function succession(world, n, rng) {
 function assignRoles(world, n, pawns, rng) {
   const adults = pawns.filter((p) => p.age >= 16 && p.age < 60);
   const atWar = Object.values(n.relations).some((r) => r.state === 'war');
-  const ratio = clamp(n.laws.conscription + (n.ideology.war < -30 ? 0.08 : 0) + (atWar ? 0.12 : 0) - (n.ideology.war > 40 ? 0.08 : 0), 0.04, 0.5);
+  const ratio = clamp(n.laws.conscription + creedFx(n).conscript + (n.ideology.war < -30 ? 0.08 : 0) + (atWar ? 0.12 : 0) - (n.ideology.war > 40 ? 0.08 : 0), 0.04, 0.5);
   const wantSoldiers = n.era >= 1 ? Math.round(adults.length * ratio) : Math.round(adults.length * ratio * 0.5);
   const soldiers = adults.filter((p) => p.role === 'soldier');
   if (soldiers.length < wantSoldiers) {
@@ -245,7 +248,7 @@ function assignRoles(world, n, pawns, rng) {
     for (const p of cands.slice(0, wantSoldiers - soldiers.length)) p.role = 'soldier';
   } else if (soldiers.length > wantSoldiers + 1) for (const p of soldiers.slice(wantSoldiers)) if (!p.squad) p.role = 'citizen';
   // natural prophets arise among zealots in spiritual nations
-  if (n.ideology.faith < -40 && !pawns.some((p) => p.role === 'prophet') && rng.chance(0.15)) {
+  if ((n.ideology.faith < -40 || n.creed?.memes.some((m) => m === 'spiritual' || m === 'ancestral')) && !pawns.some((p) => p.role === 'prophet') && rng.chance(0.15)) {
     const z = pawns.find((p) => p.traits.includes('zealot') && p.age > 20);
     if (z) makeProphet(world, z);
   }
@@ -337,7 +340,7 @@ function unrest(world, n, pawns, rng, avgMood) {
     const exile = foundNation(world, site, { ai: true, pop: 0, race: leader.race });
     exile.name = rng.chance(0.5) ? `Free ${nationName(world.rng, n.lang).replace(/^(Tribe of |People of )/, '')}` : `${leader.family} Exiles`;
     exile.lang = n.lang; exile.era = n.era; exile.research = n.research * 0.85;
-    for (const ax of AXES) exile.ideology[ax.id] = clamp(n.ideology[ax.id] + rng.range(-50, 50), -100, 100);
+    forkCreed(world, n, exile, rng);
     const es = world.settlements[exile.capitalId];
     es.stock.food += 20;
     moveGroup(world, followers, es, exile);

@@ -5,7 +5,7 @@ import { powerById } from '../data/powers.js';
 
 /** Super Pixel Effects animation for a power: by id first, then by category. */
 const SPX_BY_ID = { heal: 'spell_heal_001', cure: 'spell_heal_001', revive: 'spell_heal_001', inspire: 'round_sparkle_burst_001', harvest: 'round_sparkle_burst_002', tectonic: 'epic_explosion_001', lightning: 'lightning_strike_001', smite: 'lightning_burst_001', fireball: 'stylized_explosion_001', meteor: 'epic_explosion_002', plague: 'spell_poison_001', blight: 'status_poison_001' };
-const SPX_BY_CAT = { nature: 'round_sparkle_burst_003', life: 'round_heart_burst_001', creatures: 'round_light_burst_001', war: 'symmetrical_impact_001', curses: 'spell_death_001', world: 'scifi_spark_burst_001', divine: 'round_light_burst_001' };
+const SPX_BY_CAT = { nature: 'round_sparkle_burst_003', life: 'round_heart_burst_001', farm: 'round_light_burst_001', wild: 'round_light_burst_001', war: 'symmetrical_impact_001', curses: 'spell_death_001', world: 'scifi_spark_burst_001', divine: 'round_light_burst_001' };
 export const spxForPower = (id) => { const P = powerById[id]; return SPX_BY_ID[id] || SPX_BY_CAT[P?.cat] || 'round_light_burst_001'; };
 
 const POWER_COL = { inspire: '#ffe066', rain: '#7fc8ff', heal: '#ff7fa8', calm: '#b8f5ff', breeze: '#d8f5ff', omen: '#e0c0ff', harvest: '#ffd34d', revelation: '#c58cff', ore: '#ffe9a0', cure: '#9fffcf', valor: '#ff9a6a', fertility: '#ffb0d0', tectonic: '#c8a070', avatar: '#fff6b0', orbshield: '#7fe8ff', prophecy: '#ffe066' };

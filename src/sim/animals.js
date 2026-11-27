@@ -40,7 +40,7 @@ export function stepAnimals(world, dt, rng, hotChunks) {
     let target = a.angry ? world.pawns[a.angry] : null;
     if (target && (target.dead || dist(a.x, a.y, target.x, target.y, W) > 14)) { a.angry = null; target = null; }
     if (!target && A.predator && rng.chance(dt * 0.35)) {
-      const prey = pawnsNear(world, a.x, a.y, 8).filter((p) => !p.dead && p.nationId !== a.patron); // summoned beasts spare their patron's people
+      const prey = pawnsNear(world, a.x, a.y, 8).filter((p) => !p.dead && p.nationId !== a.patron && !((world.nations[p.nationId]?._pawns?.length ?? 99) < 5)); // wild predators leave a tiny founding band alone until it has 5 people // summoned beasts spare their patron's people
       if (prey.length === 1 || (prey.length && prey.length < 3 && rng.chance(0.3))) { a.angry = prey[0].id; target = prey[0]; }
     }
     if (target) {

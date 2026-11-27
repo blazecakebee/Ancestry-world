@@ -59,7 +59,7 @@ export function showMainMenu(app) {
 // ---------- New Globe ----------
 export function showNewGlobe(app, multiplayer) {
   const s = app.settings;
-  const st = { name: randomWorldName(), seed: (Math.random() * 1e9) | 0, size: 'normal', ai: 6, player: s.playerName || 'Deity', tribe: '', race: 'human', color: NATION_COLORS[0], maxPlayers: 6, peacefulAI: false, hostOnlySpeed: false };
+  const st = { name: randomWorldName(), seed: (Math.random() * 1e9) | 0, size: 'normal', ai: 9, player: s.playerName || 'Deity', tribe: '', race: 'random', founders: 2, color: NATION_COLORS[0], maxPlayers: 6, peacefulAI: false, hostOnlySpeed: false };
   const body = h('div', { class: 'col' });
   const wheel = colorWheel({ value: st.color, onChange: (c) => { st.color = c; } });
   const render = () => {
@@ -71,13 +71,18 @@ export function showNewGlobe(app, multiplayer) {
         h('label', { class: 'field' }, 'Tribe name (optional)', h('input', { type: 'text', value: st.tribe, placeholder: 'Generated if empty', maxlength: 32, oninput: (e) => (st.tribe = e.target.value) })),
       ),
       h('div', { class: 'field small muted' }, 'Planet size'),
-      h('div', { class: 'grid-3' }, [['small', 'Small', '384 × 192 · quick games'], ['normal', 'Normal', '512 × 256 · recommended'], ['large', 'Large', '768 × 384 · epic, heavier']].map(([id, n, d]) =>
-        h('div', { class: `card pick ${st.size === id ? 'on' : ''}`, onclick: () => { st.size = id; render(); } }, h('div', { class: 'bold' }, n), h('div', { class: 'tiny muted' }, d)))),
+      h('div', { class: 'grid-4' }, [['small', 'Small', '512 × 256 · quick games'], ['normal', 'Normal', '768 × 384 · recommended'], ['large', 'Large', '1024 × 512 · epic'], ['huge', 'Huge', '1536 × 768 · vast, heavier']].map(([id, n, d]) =>
+        h('div', { class: `card pick ${st.size === id ? 'on' : ''}`, onclick: () => { st.size = id; st.ai = ({ small: 6, normal: 9, large: 12, huge: 16 })[id]; render(); } }, h('div', { class: 'bold' }, n), h('div', { class: 'tiny muted' }, d)))),
       h('div', { class: 'field small muted' }, 'Your people'),
-      h('div', { class: 'grid-3' }, Object.entries(RACES).map(([id, r]) =>
-        h('div', { class: `card pick ${st.race === id ? 'on' : ''}`, onclick: () => { st.race = id; render(); } }, h('div', { class: 'row' }, h('span', { class: 'dot', style: { background: r.color } }), h('b', {}, r.name)), h('div', { class: 'tiny muted', style: { marginTop: '6px' } }, r.desc)))),
+      h('div', { class: 'grid-4' },
+        h('div', { class: `card pick ${st.race === 'random' ? 'on' : ''}`, onclick: () => { st.race = 'random'; render(); } }, h('div', { class: 'row' }, h('span', { class: 'dot', style: { background: 'conic-gradient(#6fb3ff, #7be07a, #ff7a5a, #6fb3ff)' } }), h('b', {}, 'Random')), h('div', { class: 'tiny muted', style: { marginTop: '6px' } }, 'Let fate choose which people you begin with.')),
+        ...Object.entries(RACES).map(([id, r]) =>
+          h('div', { class: `card pick ${st.race === id ? 'on' : ''}`, onclick: () => { st.race = id; render(); } }, h('div', { class: 'row' }, h('span', { class: 'dot', style: { background: r.color } }), h('b', {}, r.name)), h('div', { class: 'tiny muted', style: { marginTop: '6px' } }, r.desc)))),
+      h('div', { class: 'field small muted' }, 'Starting band'),
+      h('div', { class: 'grid-3' }, [[2, 'A founding pair', 'Just two settlers per nation. Slow, tense and heroic.'], [5, 'A small family', 'Five settlers per nation.'], [9, 'A full band', 'Nine settlers per nation. Gentle start.']].map(([n, t, d]) =>
+        h('div', { class: `card pick ${st.founders === n ? 'on' : ''}`, onclick: () => { st.founders = n; render(); } }, h('div', { class: 'bold' }, t), h('div', { class: 'tiny muted' }, d)))),
       h('div', { class: 'field small muted' }, 'Nation colour'), wheel,
-      h('label', { class: 'field' }, h('span', {}, `AI nations at start: ${st.ai}`), h('input', { type: 'range', min: 2, max: 12, value: st.ai, oninput: (e) => { st.ai = +e.target.value; e.target.previousElementSibling.textContent = `AI nations at start: ${st.ai}`; } })),
+      h('label', { class: 'field' }, h('span', {}, `AI nations at start: ${st.ai}`), h('input', { type: 'range', min: 2, max: 20, value: st.ai, oninput: (e) => { st.ai = +e.target.value; e.target.previousElementSibling.textContent = `AI nations at start: ${st.ai}`; } })),
       multiplayer ? h('div', { class: 'card col' },
         h('b', {}, 'Co-op options'),
         h('label', { class: 'row small' }, h('input', { type: 'checkbox', checked: st.peacefulAI, onchange: (e) => (st.peacefulAI = e.target.checked) }), 'AI nations never declare war on players'),
@@ -187,28 +192,9 @@ export async function showCloud(app, asHost = false) {
   if (cloud.user) loadList();
 }
 
-// ---------- Codex ----------
-export function showCodex(tab = 'lore') {
-  const body = h('div');
-  const render = () => {
-    const content = h('div', { class: 'col' });
-    if (tab === 'lore') add(content, ...LORE.intro.split('\n\n').map((p) => h('p', {}, p)), h('h3', {}, 'A deity\'s guide'), ...LORE.deityGuide.map((g) => h('div', { class: 'card' }, h('b', {}, g.title), h('p', { class: 'small', style: { margin: '6px 0 0' } }, g.text))), h('h3', {}, 'Sayings of the world'), ...LORE.quotes.slice(0, 12).map((q) => h('div', { class: 'quote small' }, `“${q.text}” — ${q.by}`)));
-    if (tab === 'eras') add(content, ...ERAS.map((e) => h('div', { class: 'card' }, h('div', { class: 'row' }, h('b', {}, `${e.id + 1}. ${e.name}`), h('span', { class: 'chip' }, e.short), h('span', { class: 'chip grow', style: { justifyContent: 'flex-end', border: 0, background: 'none' } }, e.cost ? `${e.cost.toLocaleString()} research` : 'Start')), h('p', { class: 'small', style: { margin: '6px 0' } }, LORE.eras[e.key] || e.blurb), h('div', { class: 'tiny muted' }, `Weapons: ${e.weapon.name} · Medicine: ${e.med} · Food: ${e.meal}, ${e.ration}`))));
-    if (tab === 'traits') {
-      const cats = {}; for (const [id, t] of Object.entries(TRAITS)) (cats[t.cat] ||= []).push([id, t]);
-      for (const [c, list] of Object.entries(cats)) add(content, h('h3', { style: { textTransform: 'capitalize' } }, c), h('div', { class: 'grid-2' }, list.map(([id, t]) => h('div', { class: 'card' }, h('span', { class: 'trait', style: { color: t.color, borderColor: t.color } }, t.name), h('p', { class: 'small', style: { margin: '6px 0 0' } }, t.desc)))));
-    }
-    if (tab === 'races') add(content, ...Object.values(RACES).map((r) => h('div', { class: 'card' }, h('div', { class: 'row' }, h('span', { class: 'dot', style: { background: r.color } }), h('b', {}, r.name)), h('p', { class: 'small' }, r.desc), h('div', { class: 'tiny muted' }, Object.entries(r.fx).map(([k, v]) => `${k} ${v > 0 ? '+' : ''}${v}`).join(' · ')))));
-    if (tab === 'powers') for (const T of TIERS) add(content, h('h3', {}, `Tier ${T.tier} — ${T.name}`, h('span', { class: 'muted small' }, ` (devotion ${T.devotion}+)`)), h('div', { class: 'grid-2' }, POWERS.filter((p) => p.tier === T.tier).map((p) => h('div', { class: 'card' }, h('div', { class: 'row' }, iconImg(p.icon), h('b', {}, p.name), h('span', { class: 'chip', style: { marginLeft: 'auto' } }, `✦ ${p.cost}`)), h('p', { class: 'small', style: { margin: '6px 0 0' } }, p.desc)))));
-    if (tab === 'gov') add(content, ...GOVERNMENTS.map((g) => h('div', { class: 'card' }, h('b', {}, g.name), h('span', { class: 'chip', style: { marginLeft: '8px' } }, `from ${ERAS[g.era].name}`), h('p', { class: 'small' }, LORE.governments[g.id] || ''), h('div', { class: 'tiny muted' }, `Succession: ${g.succession}`))));
-    if (tab === 'ages') add(content, ...Object.entries(WORLD_AGES).map(([id, a]) => h('div', { class: 'card' }, h('b', { style: { color: a.color } }, a.name), h('p', { class: 'small' }, LORE.ages[id] || a.desc), h('div', { class: 'tiny muted' }, a.desc))));
-    if (tab === 'biomes') add(content, h('div', { class: 'grid-2' }, BIOMES.map((b) => h('div', { class: 'card row' }, h('span', { class: 'dot', style: { background: `rgb(${b.color})`, width: '18px', height: '18px', borderRadius: '6px' } }), h('div', {}, h('b', {}, b.name), h('div', { class: 'tiny muted' }, LORE.biomes[b.key] || ''))))));
-    if (tab === 'credits') add(content, h('p', {}, LPC_CREDIT), h('p', {}, GCHAR_CREDIT), h('p', {}, 'Farm animals and crops: "Modern Farm" by LimeZu (limezu.itch.io). Moon & planet shading: PixelPlanets by Deep-Fold (MIT, deep-fold.itch.io).'), h('p', {}, 'Music: "8 Bit Videogame Music No Copyright" by Lofi Elephant — youtube.com/@lofielephant (free to use with attribution).'), h('p', { class: 'small muted' }, 'Full author list: assets/packs/lpc/AUTHORS.txt. Optional alternate character pack built from a Kaggle pixel-characters dataset (local only). Terrain, buildings, animals, icons, effects, music and sound are procedurally generated.'));
-    body.replaceChildren(tabs([['lore', 'Lore'], ['eras', 'Eras'], ['traits', 'Traits'], ['races', 'Races'], ['powers', 'Powers'], ['gov', 'Governments'], ['ages', 'World Ages'], ['biomes', 'Biomes'], ['credits', 'Credits']], tab, (t) => { tab = t; render(); }), content);
-  };
-  render();
-  modal('Lore & Trait Codex', body, { icon: iconImg('book'), width: '820px' });
-}
+// ---------- Codex ---------- (lives in ./codex.js)
+import { showCodex } from './codex.js';
+export { showCodex };
 
 // ---------- Settings ----------
 export function showSettings(app, tab = 'display') {
