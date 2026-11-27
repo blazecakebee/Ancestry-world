@@ -165,3 +165,6 @@ label.field { display: flex; flex-direction: column; gap: 5px; font-size: .9em; 
 #cursor-trail { position: fixed; inset: 0; pointer-events: none; z-index: 300; }
 
 a { color: var(--accent); text-decoration: none; font-weight: 600; } a:hover { text-decoration: underline; }
+
+#menu .btn.has-new { border-color: var(--accent); box-shadow: var(--glow); }
+#menu .btn.has-new .sub { color: var(--accent); font-weight: 700; }

@@ -42,7 +42,7 @@ export const DEFAULTS = {
   tooltipDelay: 250, colorblind: 'none', shake: 100, flash: 100, particles: 100, bgFps: 15, pixelSnap: true,
   volume: { master: 80, music: 45, ambient: 60, ui: 70, miracles: 80, world: 70 },
   keys: { ...DEFAULT_KEYS }, streamerMode: false,
-  characterStyle: 'lpc', musicSource: 'playlist', cursorTrail: true, tutorialDone: false, playerName: '',
+  characterStyle: 'lpc', musicSource: 'playlist', lastSeenVersion: '', cursorTrail: true, tutorialDone: false, playerName: '',
 };
 
 const KEY = 'aw.settings.v1';

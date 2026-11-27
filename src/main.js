@@ -2,7 +2,7 @@
 import { loadSettings, saveSettings, applySettings } from './ui/settings.js';
 import { h, toast, modal, wireUISounds, wireTooltips, closeAllWindows } from './ui/dom.js';
 import { initCursor, setCursor } from './ui/cursor.js';
-import { showMainMenu, showFlagEditor, showSettings, showCodex } from './ui/menu.js';
+import { showMainMenu, showFlagEditor, showSettings, showCodex, showChangelog } from './ui/menu.js';
 import { HUD } from './ui/hud.js';
 import { Tutorial } from './ui/tutorial.js';
 import { autosave, saveWorld } from './ui/storage.js';
@@ -129,6 +129,7 @@ class App {
       h('button', { class: 'btn', onclick: () => { m.close(); this.exportSave(); } }, iconImg('load'), 'Export save file'),
       h('button', { class: 'btn', onclick: () => { m.close(); showSettings(this); } }, iconImg('settings'), 'Settings'),
       h('button', { class: 'btn', onclick: () => { m.close(); showCodex(); } }, iconImg('book'), 'Codex'),
+      h('button', { class: 'btn', onclick: () => { m.close(); showChangelog(this); } }, iconImg('scroll'), "What's New"),
       h('button', { class: 'btn danger', onclick: async () => { m.close(); if (this.session.mode !== 'client') await this.save(true); this.quitToMenu(); } }, iconImg('close'), this.session.mode === 'client' ? 'Leave world' : 'Save & quit to menu')), { icon: iconImg('settings'), width: '360px' });
   }
   chooseTribe() {

@@ -15,6 +15,7 @@ import { LORE } from '../data/lore.js';
 import { NATION_COLORS } from '../data/names.js';
 import { audio, CHANNELS } from '../audio/audio.js';
 import { LPC_CREDIT } from '../render/lpc.js';
+import { CHANGELOG, CURRENT_VERSION } from '../data/changelog.js';
 
 export function showMainMenu(app) {
   const root = document.getElementById('menu');
@@ -29,9 +30,10 @@ export function showMainMenu(app) {
       item('load', 'Load World', 'Your saves', () => showLoad(app)),
       item('book', 'Lore & Trait Codex', 'Learn the world', () => showCodex()),
       item('settings', 'Settings', '20+ options', () => showSettings(app)),
+      (() => { const unseen = app.settings.lastSeenVersion !== CURRENT_VERSION; const b = item('scroll', "What's New", unseen ? `v${CURRENT_VERSION} · new!` : `v${CURRENT_VERSION}`, () => { showChangelog(app); b.querySelector('.sub').textContent = `v${CURRENT_VERSION}`; b.classList.remove('has-new'); }); if (unseen) b.classList.add('has-new'); return b; })(),
     ),
     h('div', { class: 'quote' }, `“${q.text}” — ${q.by}`),
-    h('div', { class: 'foot' }, 'v0.1 · Made with love for co-op god games. Press ', h('span', { class: 'kbd' }, 'F11'), ' for fullscreen.'),
+    h('div', { class: 'foot' }, `v${CURRENT_VERSION} · Made with love for co-op god games. Press `, h('span', { class: 'kbd' }, 'F11'), ' for fullscreen.'),
   ));
   root.classList.remove('hidden');
 }
@@ -206,4 +208,26 @@ export function showFlagEditor(app, nation, { first = false } = {}) {
   };
   render();
   const m = modal(first ? 'Design your flag' : 'Flag & identity', body, { icon: iconImg('flag'), width: '640px' });
+}
+
+// ---------- Update log ----------
+const TAG = { new: ['New', 'var(--good)'], improved: ['Improved', 'var(--info)'], fixed: ['Fixed', 'var(--accent-2)'], balance: ['Balance', 'var(--warn)'] };
+export function showChangelog(app) {
+  let filter = 'all';
+  const body = h('div', { class: 'col' });
+  const render = () => {
+    const list = h('div', { class: 'col' });
+    for (const [i, v] of CHANGELOG.entries()) {
+      const notes = v.notes.filter(([t]) => filter === 'all' || t === filter);
+      if (!notes.length) continue;
+      add(list, h('div', { class: 'card col', style: { gap: '6px' } },
+        h('div', { class: 'row' }, h('b', { style: { fontSize: '1.1em' } }, `v${v.version}`), h('span', {}, v.title), i === 0 ? h('span', { class: 'chip', style: { color: 'var(--accent)' } }, 'Latest') : null, h('span', { class: 'tiny muted', style: { marginLeft: 'auto' } }, new Date(v.date + 'T12:00:00').toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }))),
+        ...notes.map(([t, text]) => h('div', { class: 'row small', style: { alignItems: 'flex-start' } }, h('span', { class: 'chip', style: { color: TAG[t][1], minWidth: '76px', justifyContent: 'center', flex: 'none' } }, TAG[t][0]), h('span', { style: { lineHeight: 1.45 } }, text)))));
+    }
+    if (!list.children.length) add(list, h('p', { class: 'muted' }, 'Nothing in this category yet.'));
+    body.replaceChildren(tabs([['all', 'All'], ['new', 'New'], ['improved', 'Improved'], ['fixed', 'Fixed'], ['balance', 'Balance']], filter, (f) => { filter = f; render(); }), list);
+  };
+  render();
+  app.settings.lastSeenVersion = CURRENT_VERSION; saveSettings(app.settings);
+  modal("What's New", body, { icon: iconImg('scroll'), width: '720px' });
 }

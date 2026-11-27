@@ -1,6 +1,12 @@
 // Small DOM toolkit: element builder, toasts, tooltips, draggable & resizable windows, UI sounds.
 import { audio } from '../audio/audio.js';
 
+// Let append/prepend/replaceChildren skip null/undefined/false, so optional UI parts never render as "null".
+for (const m of ['append', 'prepend', 'replaceChildren']) {
+  const orig = Element.prototype[m];
+  Element.prototype[m] = function (...kids) { return orig.apply(this, kids.filter((k) => k !== null && k !== undefined && k !== false)); };
+}
+
 export function h(tag, attrs = {}, ...kids) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
