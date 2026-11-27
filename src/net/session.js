@@ -8,12 +8,16 @@ import { createAtmosphere } from '../world/atmosphere.js';
 import { RNG } from '../core/rng.js';
 import { pawnCard, pawnFast, pawnDetail, tileRecord, applyTileRecord, atmoPacket, applyAtmo, applyFast, mapStrip, strip } from './serialize.js';
 import { computeFx } from '../sim/pawn.js';
+import { PeerSocket } from './peersocket.js';
 
 export function playerToken() {
   try { let t = localStorage.getItem('aw.token'); if (!t) { t = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('aw.token', t); } return t; }
   catch { return Math.random().toString(36).slice(2); }
 }
 const wsURL = (url) => url || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+// Peer-to-peer (PeerJS/WebRTC) by default — works from GitHub Pages. Pass a url, or open the game with ?relay, to use server/server.js instead.
+const useRelay = (url) => !!url || (typeof location !== 'undefined' && new URLSearchParams(location.search).has('relay'));
+const openSocket = (url) => (useRelay(url) ? new WebSocket(wsURL(url)) : new PeerSocket());
 
 export class Session extends EventBus {
   constructor(mode) { super(); this.mode = mode; this.pending = new Map(); this.cmdSeq = 1; this.snapTimer = 0; this.snapN = 0; this.peers = new Map(); this.modified = new Set(); this.pendingTiles = new Set(); }
@@ -29,8 +33,8 @@ export class Session extends EventBus {
   static host(world, name, { url, maxPlayers = 8 } = {}) {
     const s = Session.single(world, name); s.mode = 'host';
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(wsURL(url)); s.ws = ws;
-      ws.onerror = () => reject(new Error('Could not reach the multiplayer server. Start it with "npm start".'));
+      const ws = openSocket(url); s.ws = ws;
+      ws.onerror = (e) => reject(new Error(useRelay(url) ? 'Could not reach the multiplayer server. Start it with "npm start".' : 'Could not open a co-op room: ' + (e?.message || e?.type || 'network error')));
       ws.onmessage = (ev) => { try { s.onHostMsg(JSON.parse(ev.data), resolve); } catch (e) { console.error('[host]', e); } };
       ws.onopen = () => ws.send(JSON.stringify({ t: 'host', name: world.name, maxPlayers }));
       ws.onclose = () => s.emit('disconnected', 'Lost connection to the multiplayer server.');
@@ -39,8 +43,8 @@ export class Session extends EventBus {
   static join(code, name, { url } = {}) {
     const s = new Session('client');
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(wsURL(url)); s.ws = ws; s.name = name;
-      ws.onerror = () => reject(new Error('Could not reach the multiplayer server.'));
+      const ws = openSocket(url); s.ws = ws; s.name = name;
+      ws.onerror = (e) => reject(new Error('Could not connect: ' + (e?.message || e?.type || 'network error')));
       ws.onopen = () => ws.send(JSON.stringify({ t: 'join', code, name }));
       ws.onmessage = (ev) => { try { s.onClientMsg(JSON.parse(ev.data), resolve, reject); } catch (e) { console.error('[client]', e); reject(e); } };
       ws.onclose = () => s.emit('disconnected', 'Disconnected from the host.');
