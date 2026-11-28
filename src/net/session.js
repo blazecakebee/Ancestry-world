@@ -11,9 +11,29 @@ import { pawnCard, pawnFast, pawnDetail, tileRecord, applyTileRecord, atmoPacket
 import { computeFx } from '../sim/pawn.js';
 import { PeerSocket } from './peersocket.js';
 
+/** This browser's lasting player identity (localStorage, with a cookie as a backup). */
+let memToken = null;
 export function playerToken() {
-  try { let t = localStorage.getItem('aw.token'); if (!t) { t = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('aw.token', t); } return t; }
-  catch { return Math.random().toString(36).slice(2); }
+  if (globalThis.__awToken) return globalThis.__awToken;
+  try {
+    let t = localStorage.getItem('aw.token');
+    if (!t && typeof document !== 'undefined') t = (document.cookie.match(/(?:^|; )aw_token=([^;]+)/) || [])[1] || null;
+    if (!t) t = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+    localStorage.setItem('aw.token', t);
+    if (typeof document !== 'undefined') document.cookie = `aw_token=${t}; max-age=${60 * 60 * 24 * 3650}; path=/; SameSite=Lax`;
+    return t;
+  } catch { return memToken ||= Math.random().toString(36).slice(2, 12); }
+}
+/**
+ * Which player slot is this? The browser token first; failing that (new browser, cleared storage), a player who is
+ * offline right now, goes by the same name and still has a people of their own gets their seat back.
+ */
+export function seatFor(world, token, name, taken) {
+  const pid = 'u_' + String(token).slice(0, 10);
+  if (world.players[pid]) return pid;
+  const nm = String(name || '').trim().toLowerCase();
+  const old = Object.values(world.players).find((pl) => !pl.online && !taken.has(pl.id) && String(pl.name || '').trim().toLowerCase() === nm && world.nations[pl.nationId] && !world.nations[pl.nationId].dead);
+  return old ? old.id : pid;
 }
 const wsURL = (url) => url || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
 // Peer-to-peer (PeerJS/WebRTC) by default — works from GitHub Pages. Pass a url, or open the game with ?relay, to use server/server.js instead.
@@ -26,7 +46,7 @@ export class Session extends EventBus {
   // ---------- factories ----------
   static single(world, name = 'You') {
     const s = new Session('single');
-    s.pid = 'u_' + playerToken().slice(0, 10); s.attachWorld(world);
+    s.pid = seatFor(world, playerToken(), name, new Set()); s.attachWorld(world);
     world.hostId = s.pid; world.players[s.pid] = world.players[s.pid] || { id: s.pid, name, nationId: -1, online: true, color: '#ffd34d' };
     world.players[s.pid].name = name; world.players[s.pid].online = true;
     return s;
@@ -41,8 +61,8 @@ export class Session extends EventBus {
       ws.onclose = () => s.emit('disconnected', 'Lost connection to the multiplayer server.');
     });
   }
-  static join(code, name, { url } = {}) {
-    const s = new Session('client');
+  static join(code, name, { url, token } = {}) {
+    const s = new Session('client'); s.token = token;
     return new Promise((resolve, reject) => {
       const ws = openSocket(url); s.ws = ws; s.name = name;
       ws.onerror = (e) => reject(new Error('Could not connect: ' + (e?.message || e?.type || 'network error')));
@@ -67,7 +87,7 @@ export class Session extends EventBus {
   watch(ids) { if (this.mode === 'client') this.send({ t: 'watch', ids }); }
   camera(x, y, zoom) {
     if (this.mode === 'client') { if ((this._camT = (this._camT || 0) + 1) % 30 === 0) this.send({ t: 'camera', x, y, zoom }); }
-    else this.world.cameraHints[this.pid] = { x, y, zoom };
+    else { this.world.cameraHints[this.pid] = { x, y, zoom }; const pl = this.world.players[this.pid]; if (pl) pl.cam = { x, y, zoom }; }
   }
 
   // ---------- per-frame ----------
@@ -97,8 +117,10 @@ export class Session extends EventBus {
     const peer = this.peers.get(m.from); if (!peer) return;
     const p = m.payload || {};
     if (p.t === 'auth') {
-      const pid = 'u_' + String(p.token || m.from).slice(0, 10);
-      if (pid === this.pid) peer.pid = pid + '_2'; else peer.pid = pid;
+      const taken = new Set([this.pid, ...[...this.peers.values()].map((q) => q.pid).filter(Boolean)]);
+      let pid = seatFor(this.world, p.token || m.from, p.name || peer.name, taken);
+      if (pid === this.pid) pid += '_2';
+      peer.pid = pid;
       const w = this.world;
       w.players[peer.pid] = w.players[peer.pid] || { id: peer.pid, name: String(p.name || peer.name).slice(0, 24), nationId: -1, color: '#4fb0ff' };
       w.players[peer.pid].online = true; w.players[peer.pid].name = String(p.name || peer.name).slice(0, 24);
@@ -110,7 +132,7 @@ export class Session extends EventBus {
     if (!peer.pid) return;
     if (p.t === 'cmd') { const r = this.game.command(peer.pid, p.cmd || {}); this.sendTo(m.from, { t: 'cmdResult', id: p.id, r }); if (p.cmd?.type === 'claim') this.emit('players'); return; }
     if (p.t === 'watch') { peer.watch = (p.ids || []).slice(0, 8).map(Number); return; }
-    if (p.t === 'camera') { this.world.cameraHints[peer.pid] = { x: +p.x, y: +p.y, zoom: +p.zoom }; return; }
+    if (p.t === 'camera') { this.world.cameraHints[peer.pid] = { x: +p.x, y: +p.y, zoom: +p.zoom }; const pl = this.world.players[peer.pid]; if (pl) pl.cam = { x: +p.x || 0, y: +p.y || 0, zoom: +p.zoom || 30 }; return; }
   }
   sendTo(to, payload) { if (this.ws?.readyState === 1) this.ws.send(JSON.stringify({ t: 'relay', to, payload })); }
   welcome(peer) {
@@ -168,7 +190,7 @@ export class Session extends EventBus {
   onClientMsg(m, resolve, reject) {
     if (m.t === 'hello') return;
     if (m.t === 'error') { reject?.(new Error(m.msg)); return; }
-    if (m.t === 'joined') { this.code = m.code; this.send({ t: 'auth', token: playerToken(), name: this.name }); return; }
+    if (m.t === 'joined') { this.code = m.code; this.send({ t: 'auth', token: this.token || playerToken(), name: this.name }); return; }
     if (m.t === 'hostLeft') { this.emit('disconnected', 'The host closed the world.'); return; }
     if (m.t === 'welcome') { this.buildMirror(m); resolve?.(this); return; }
     if (m.t === 'cmdResult') { const r = this.pending.get(m.id); if (r) { this.pending.delete(m.id); r(m.r); this.emit('cmd', { r: m.r }); } return; }

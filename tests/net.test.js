@@ -19,7 +19,7 @@ try {
   let running = true;
   (async () => { while (running) { host.update(0.05); await sleep(16); } })();
 
-  const client = await Session.join(host.code, 'Friendo', { url });
+  const client = await Session.join(host.code, 'Friendo', { url, token: 'friendtoken01' });
   assert(client.world && client.world.W === 384, 'client built mirror world from seed');
   const tileMatch = [...host.modified].slice(0, 200).every((i) => client.world.tiles.owner[i] === world.tiles.owner[i]);
   assert(tileMatch, 'client tiles match host (owner diffs applied)');
@@ -47,7 +47,20 @@ try {
   await client.command({ type: 'chat', text: 'hello from the client' });
   await sleep(1200); console.log("server up");
   assert(world.log.some((e) => e.cat === 'chat' && e.text.includes('hello')) && client.world.log.some((e) => e.text.includes('hello')), 'chat relayed to everyone');
-  running = false; client.close(); host.close();
+  // ---- rejoining keeps everything: same browser token, or (new browser) the same name ----
+  const myNationId = world.players[client.pid].nationId;
+  await client.command({ type: 'flag', flag: { pattern: 'solid', c1: '#ff0000', c2: '#00ff00', c3: '#0000ff', emblem: 'star', ec: '#ffffff', ep: 'c' }, name: 'Friendlanders' });
+  client.close(); await sleep(1500);
+  assert(world.players[client.pid].online === false, 'host marked the friend offline');
+  const again = await Session.join(host.code, 'Friendo', { url, token: 'friendtoken01' });
+  await sleep(400);
+  assert(again.pid === client.pid && again.myNation?.id === myNationId && again.myNation?.flagSet, 'rejoining (same browser) gives back the same people, flag and all');
+  again.close(); await sleep(1500);
+  const fresh = await Session.join(host.code, 'Friendo', { url, token: 'otherbrowser9' });
+  await sleep(400);
+  assert(fresh.myNation?.id === myNationId && fresh.myNation?.name === 'Friendlanders', 'rejoining from a new browser under the same name finds the old seat');
+  fresh.close();
+  running = false; host.close();
   console.log('\nAll co-op checks passed.');
 } finally { srv.kill(); }
 process.exit(0);

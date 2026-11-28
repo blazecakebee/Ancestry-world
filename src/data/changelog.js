@@ -16,6 +16,7 @@ export const CHANGELOG = [
       ['fixed', 'Hunters no longer get stuck chasing prey they cannot reach: they pick another animal or give up and come home.'],
       ['fixed', 'Co-op: people and animals now glide smoothly on your friends\' screens instead of moving in jerky steps (the host sends updates twice as often and clients predict movement in between).'],
       ['fixed', 'Co-op: rejoining a friend\'s world no longer asks you to design your flag again, and closing the flag designer the first time keeps your starting banner.'],
+      ['new', 'Co-op: every player keeps their place in each world. Rejoin a friend\'s world (or load your own) and you get back your people, flag, research, permissions and even your camera position, exactly where you left off. Your seat is tied to your browser; if you switch browsers or clear your data, joining under the same name reclaims it.'],
     ],
   },
   {

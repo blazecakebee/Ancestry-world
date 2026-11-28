@@ -114,7 +114,9 @@ class App {
     this.renderer.onFxHook = (e) => this.fxSound(e);
     const n = session.myNation;
     const cap = n && session.world.settlements[n.capitalId];
-    if (cap) this.renderer.focus(cap.x, cap.y, 40); else this.renderer.focus(session.world.W / 2, session.world.H / 2, 2);
+    const cam = session.me?.cam; // pick up exactly where you left off in this world
+    if (cam && n) this.renderer.focus(cam.x, cam.y, Math.max(2, cam.zoom || 30));
+    else if (cap) this.renderer.focus(cap.x, cap.y, 40); else this.renderer.focus(session.world.W / 2, session.world.H / 2, 2);
     this.setLoading(null);
     audio.play('era');
     this.onTutorialDone = () => { const nn = this.session?.myNation; if (nn && !nn.flagSet && !(this.session.mode === 'client' && nn.flag)) showFlagEditor(this, nn, { first: true }); };
