@@ -376,6 +376,25 @@ export class Renderer {
     if (e.type === 'era') { const n = this.world.nations[e.nationId]; e.label = `${n ? n.name : ''} — ${['Stone Age', 'Neolithic', 'Bronze Age', 'Iron Age', 'Medieval', 'Renaissance', 'Industrial', 'Atomic', 'Ultra-Tech', 'Offworld'][e.era]}`; }
     this.fx.handle(e, this.settings);
   }
+  boatOf(p) { const n = this.world.nations[p.nationId]; return !n ? 0 : n.techs?.navigation ? 2 : n.techs?.canoes || n.era >= 2 ? 1 : 0; }
+  /** A dugout canoe (or a little sailing boat) drawn over the legs of someone crossing water. */
+  drawBoat(ctx, sx, sy, S, kind, dir) {
+    const px = Math.max(1, S), hw = 13 * S, top = sy - 7 * S;
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(sx - hw - 3 * S, sy + 1 * S, (hw + 3 * S) * 2, px); // wake
+    ctx.fillStyle = kind >= 2 ? '#7a4a2a' : '#8a5a32';
+    ctx.beginPath(); ctx.moveTo(sx - hw - 3 * S, top); ctx.lineTo(sx + hw + 3 * S, top); ctx.lineTo(sx + hw - 2 * S, sy); ctx.lineTo(sx - hw + 2 * S, sy); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = kind >= 2 ? '#a8723e' : '#b07a44'; ctx.fillRect(sx - hw - 2 * S, top, (hw + 2 * S) * 2, 1.6 * S); // gunwale
+    ctx.fillStyle = '#4a2e18'; ctx.fillRect(sx - hw + 2 * S, sy - px, (hw - 2 * S) * 2, px);
+    if (kind >= 2) { // mast & sail
+      ctx.fillStyle = '#5a3a20'; ctx.fillRect(sx + dir * 8 * S, top - 22 * S, 1.4 * S, 22 * S);
+      ctx.fillStyle = '#efe6cf'; ctx.beginPath(); ctx.moveTo(sx + dir * 9.4 * S, top - 21 * S); ctx.lineTo(sx + dir * 9.4 * S, top - 4 * S); ctx.lineTo(sx + dir * 20 * S, top - 6 * S); ctx.closePath(); ctx.fill();
+    } else { // paddle
+      ctx.strokeStyle = '#6e4a2a'; ctx.lineWidth = Math.max(1, S * 0.9); const ph = Math.sin(this.rtime * 4);
+      ctx.beginPath(); ctx.moveTo(sx + dir * 3 * S, top - 8 * S); ctx.lineTo(sx + dir * (9 + ph * 3) * S, sy + 2 * S); ctx.stroke();
+    }
+    ctx.restore();
+  }
   sheetFor(p) {
     const n = this.world.nations[p.nationId];
     const era = p.gearEra ?? n?.era ?? 0, col = n?.color || '#cccccc';
@@ -459,7 +478,13 @@ export class Renderer {
       seenB.add(bid); list.push({ y: b.y + b.h - 0.02, k: 1, b });
     }
     const inView = (px, py) => { const ddx = wdx(c.x, px, W); return Math.abs(ddx) < this.W / 2 / T + 2 && py > y0 - 2 && py < y1 + 3; };
-    for (const an of Object.values(w.animals)) if (inView(an.x, an.y)) list.push({ y: an.y, k: 2, a: an });
+    for (const an of Object.values(w.animals)) {
+      if (!inView(an.x, an.y)) continue;
+      // smooth glide toward the latest position (co-op snapshots arrive ~10 times a second)
+      if (an.rx === undefined || Math.abs(wdx(an.rx, an.x, W)) > 4 || Math.abs(an.ry - an.y) > 4) { an.rx = an.x; an.ry = an.y; }
+      const ka = Math.min(1, dt * 8 * Math.max(1, Math.sqrt(w.speed || 1))); an.rx = wrap(an.rx + wdx(an.rx, an.x, W) * ka, W); an.ry += (an.y - an.ry) * ka;
+      list.push({ y: an.ry, k: 2, a: an });
+    }
     for (const d of Object.values(w.drops || {})) if (inView(d.x, d.y)) list.push({ y: d.y - 0.05, k: 6, d });
     if (T > 14) for (const st of Object.values(w.settlements)) { // street furniture: farmyard clutter -> carts & flowers -> lamps, benches, kiosks
       if (!inView(st.x, st.y) && !inView(st.x + st.radius, st.y) && !inView(st.x - st.radius, st.y)) continue;
@@ -467,9 +492,12 @@ export class Renderer {
     }
     this.sheetBudget = 30;
     for (const p of Object.values(w.pawns)) {
-      if (p.rx === undefined || Math.abs(wdx(p.rx, p.x, W)) > 6 || Math.abs(p.ry - p.y) > 6) { p.rx = p.x; p.ry = p.y; }
-      const k = Math.min(1, dt * 14 * Math.max(1, Math.sqrt(w.speed || 1)));
-      const ddx = wdx(p.rx, p.x, W), ddy = p.y - p.ry;
+      // co-op clients: extrapolate along the last known velocity (dead reckoning), so people walk smoothly between snapshots
+      let txp = p.x, typ = p.y;
+      if (p._st !== undefined && !w.paused) { const ahead = Math.min(0.15, (performance.now() - p._st) / 1000); txp = p.x + (p._vx || 0) * ahead; typ = p.y + (p._vy || 0) * ahead; }
+      if (p.rx === undefined || Math.abs(wdx(p.rx, txp, W)) > 6 || Math.abs(p.ry - typ) > 6) { p.rx = txp; p.ry = typ; }
+      const k = Math.min(1, dt * (p._st !== undefined ? 9 : 14) * Math.max(1, Math.sqrt(w.speed || 1)));
+      const ddx = wdx(p.rx, txp, W), ddy = typ - p.ry;
       p.rx = wrap(p.rx + ddx * k, W); p.ry += ddy * k;
       if (Math.abs(ddx) + Math.abs(ddy) > 0.003) { p._dir = Math.abs(ddx) > Math.abs(ddy) * 0.8 ? (ddx < 0 ? DIR.LEFT : DIR.RIGHT) : (ddy < 0 ? DIR.BACK : DIR.FRONT); p._moving = this.time; }
       if (inView(p.rx, p.ry)) list.push({ y: p.heldBy && !p.dead ? p.ry + 6 : p.ry, k: 3, p });
@@ -492,7 +520,7 @@ export class Renderer {
         ctx.drawImage(spr, Math.round(sx + T / 2 - 48 * k), Math.round(sy + T - 78 * k), 96 * k, 84 * k);
       } else if (e.k === 1) this.drawBuilding(ctx, e.b, s);
       else if (e.k === 2) {
-        const an = e.a, [sx, sy] = this.worldToScreen(an.x, an.y), AD = ANIMALS[an.kind] || {}, art = AD.art || an.kind, kid = an.baby ? 0.68 : 1, sz = s * 1.5 * (AD.size > 1.3 ? 1.25 : 1) * kid;
+        const an = e.a, [sx, sy] = this.worldToScreen(an.rx ?? an.x, an.ry ?? an.y), AD = ANIMALS[an.kind] || {}, art = AD.art || an.kind, kid = an.baby ? 0.68 : 1, sz = s * 1.5 * (AD.size > 1.3 ? 1.25 : 1) * kid;
         const ff = farmFrame(art, an.id || 0, this.atime + (an.id || 0) * 0.37, an.moving && !an.dead);
         const pf = ff ? null : GAN.petFrame(an.kind, this.atime + (an.id || 0) * 0.37, an.moving);
         ctx.save(); ctx.translate(Math.round(sx), Math.round(sy));
@@ -756,8 +784,12 @@ export class Renderer {
     const scale = (p.age < 14 ? 0.55 + (p.age / 14) * 0.4 : 1) * (1 + (p.fx?.size || 0)) * (p.look?.height || 1);
     const S = s * scale * (sh0g(this, p) ? 1.2 : 1);
     const held = !!p.heldBy && !p.dead;
+    // in a boat on open water: bob on the swell, no shadow
+    const ti = Math.floor(p.ry) * w.W + ((Math.floor(p.rx) % w.W) + w.W) % w.W, bm = BIOMES[w.tiles.biome[ti]];
+    const boat = !held && !p.dead && bm?.water && (bm.cost === 0 || this.boatOf(p)) ? (this.boatOf(p) || 1) : 0;
+    if (boat) sy += Math.sin(this.rtime * 2.2 + p.id) * 1.2 * S;
     // shadow (shrinks while lifted off the ground)
-    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(sx, sy, (held ? 4 : 7) * S, (held ? 1.6 : 2.5) * S, 0, 0, 7); ctx.fill();
+    if (!boat) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(sx, sy, (held ? 4 : 7) * S, (held ? 1.6 : 2.5) * S, 0, 0, 7); ctx.fill(); }
     if (held) { p._knockAt = undefined; sy -= (16 + Math.sin(this.rtime * 3) * 2) * S; }
     const kt = p._knockAt !== undefined && !held && !p.dead ? this.time - p._knockAt : -1, knocked = kt >= 0 && kt < 1.5;
     if (knocked && kt < 0.4) sy -= Math.sin(kt / 0.4 * Math.PI) * 9 * (p._knockH || 1) * S; // hop through the air
@@ -783,7 +815,7 @@ export class Renderer {
       else if (f >= 6) { sxF = (Math.floor(at * (st === 'work' ? 0.7 : 0.9)) % 6) * GW; syF = GROW.attack * GH; }
       else if (run) { sxF = (Math.floor(at * 1.9) % 8) * GW; syF = GROW.run * GH; }
       else if (f >= 2) { sxF = (Math.floor(at * 1.4) % 8) * GW; syF = GROW.walk * GH; }
-      else if (p._cheer > this.time) { sxF = (Math.floor(at * 1.1) % 4) * GW; syF = GROW.jump * GH; }
+      else if (p._cheer > this.time || p.act === 'dance') { sxF = (Math.floor(at * 1.1) % 4) * GW; syF = GROW.jump * GH; }
       else { sxF = (Math.floor(at / 4) % 5) * GW; syF = GROW.idle * GH; }
       if (p._dir === DIR.LEFT) p._gFlip = true; else if (p._dir === DIR.RIGHT) p._gFlip = false; else if (p._gFlip === undefined) p._gFlip = (p.facing || 1) < 0;
     } else if (sh.lpc) {
@@ -805,7 +837,8 @@ export class Renderer {
     if (p.possessedBy) { ctx.shadowColor = '#ffd34d'; ctx.shadowBlur = 8; }
     ctx.drawImage(sh.sheet, sxF, syF, fw, fh, -fw / 2 * S, -footY * S, fw * S, fh * S);
     ctx.restore();
-    if (sh.g && p.toolOut === 'rod' && st === 'work' && p.tools?.rod) { // fishing line + bobbing float
+    if (boat) this.drawBoat(ctx, sx, sy, S, boat, p._gFlip ? -1 : 1);
+    if (sh.g && ((p.toolOut === 'rod' && st === 'work' && p.tools?.rod) || p.act === 'fish')) { // fishing line + bobbing float
       const fwd = p._gFlip ? 1 : -1, tx = sx + fwd * 17 * S, ty = sy - 30 * S, bx = sx + fwd * 30 * S, by = sy + 2 * S + Math.sin(this.time * 5 + p.id) * 1.2 * S;
       ctx.strokeStyle = 'rgba(235,235,225,0.75)'; ctx.lineWidth = Math.max(1, S * 0.5);
       ctx.beginPath(); ctx.moveTo(tx, ty); ctx.quadraticCurveTo(bx, ty + 6 * S, bx, by); ctx.stroke();
@@ -982,9 +1015,21 @@ export class Renderer {
   drawSurfaceUI(ctx, s, local) {
     const c = this.cam, T = c.zoom, w = this.world;
     if (this.ghost) { // building placement preview
-      const g = this.ghost, [sx, sy] = this.worldToScreen(g.x, g.y);
+      const g = this.ghost, [sx, sy] = this.worldToScreen(g.x, g.y), chk = g.chk || { bad: [], gap: [], clear: [] };
+      const tileXY = (i) => { const tx = i % w.W, ty = Math.floor(i / w.W); let ddx = tx - g.x; if (ddx > w.W / 2) ddx -= w.W; if (ddx < -w.W / 2) ddx += w.W; return [sx + ddx * T, sy + (ty - g.y) * T]; };
+      // the breathing-room ring every building needs
+      ctx.save(); ctx.setLineDash([Math.max(3, T / 5), Math.max(3, T / 6)]); ctx.lineWidth = 2;
+      ctx.strokeStyle = chk.gap.length ? 'rgba(255,150,60,0.95)' : 'rgba(255,255,255,0.55)'; ctx.strokeRect(sx - T, sy - T, (g.w + 2) * T, (g.h + 2) * T); ctx.restore();
       ctx.fillStyle = g.ok ? 'rgba(98,196,106,0.35)' : 'rgba(232,72,77,0.35)'; ctx.fillRect(sx, sy, g.w * T, g.h * T);
       ctx.strokeStyle = g.ok ? '#62c46a' : '#e8484d'; ctx.lineWidth = 2; ctx.strokeRect(sx, sy, g.w * T, g.h * T);
+      for (const i of chk.bad) { const [x, y] = tileXY(i); ctx.fillStyle = 'rgba(232,72,77,0.55)'; ctx.fillRect(x, y, T, T); }
+      for (const i of chk.gap) { const [x, y] = tileXY(i); ctx.fillStyle = 'rgba(255,140,40,0.5)'; ctx.fillRect(x, y, T, T); ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5, T / 14); ctx.beginPath(); ctx.moveTo(x + T * 0.25, y + T * 0.25); ctx.lineTo(x + T * 0.75, y + T * 0.75); ctx.moveTo(x + T * 0.75, y + T * 0.25); ctx.lineTo(x + T * 0.25, y + T * 0.75); ctx.stroke(); }
+      for (const i of chk.clear) { const [x, y] = tileXY(i); ctx.fillStyle = 'rgba(255,214,80,0.45)'; ctx.fillRect(x, y, T, T); const ic = itemImage(w.tiles.feat[i] === F.TREE || w.tiles.feat[i] === F.STUMP ? 'axe_wood' : 'pickaxe_stone'); if (ic) ctx.drawImage(ic, x + T * 0.2, y + T * 0.2, T * 0.6, T * 0.6); }
+      // say why, or what the builders will do first
+      { const msg = !g.ok ? (chk.reason || 'Cannot build here.') : chk.clear.length ? `Builders will clear ${chk.clear.length} ${chk.clear.length === 1 ? 'obstacle' : 'obstacles'} first` : 'Clear ground: ready to build';
+        ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center'; const tw = ctx.measureText(msg).width, mx = sx + g.w * T / 2, my = sy + g.h * T + T + 22;
+        ctx.fillStyle = g.ok ? 'rgba(16,40,22,0.88)' : 'rgba(60,14,18,0.9)'; ctx.beginPath(); ctx.roundRect?.(mx - tw / 2 - 10, my - 15, tw + 20, 22, 8); ctx.fill();
+        ctx.fillStyle = g.ok ? (chk.clear.length ? '#ffe08a' : '#9fe6a0') : '#ff9a90'; ctx.fillText(msg, mx, my); ctx.textAlign = 'left'; }
       if (g.cost) { // what it will take: icons with need / have, red when the stores are short
         const keys = Object.keys(g.cost), k = 0.8, cw = 52 * k; let x = sx + g.w * T / 2 - (Math.max(1, keys.length) * cw) / 2; const y = sy - 10;
         ctx.fillStyle = 'rgba(16,18,34,0.82)'; ctx.beginPath(); ctx.roundRect?.(x - 6, y - 26, Math.max(1, keys.length) * cw + 12, 28, 8); ctx.fill();

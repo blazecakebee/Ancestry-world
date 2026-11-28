@@ -1,6 +1,7 @@
 // Wildlife: herds graze, predators hunt the lonely, megafauna roam the Stone Age.
 import { ANIMALS, animalAttack } from './combat.js';
 import { tileCost } from './pathfind.js';
+import { BIOMES } from '../data/biomes.js';
 import { pawnsNear, emitFx } from './world.js';
 import { wrap, dist, dx } from '../core/util.js';
 import { CHUNK } from '../world/physics.js';
@@ -12,7 +13,9 @@ const CELL = 8;                       // spatial cell (tiles) used for mate and 
 const SLICE = 10;                     // animals away from people and cameras update once every SLICE ticks
 const lifeOf = (A) => 40 + 22 * (A.size || 1);          // days; a game year is 12 days
 const MATURE = 6, BREED_CD = 5;                          // days to adulthood / between litters
-const spawnable = (world, i) => world.tiles.owner[i] === -1 && tileCost(world.tiles, i) > 0 && !world.tiles.river[i];
+/** Animals live on dry land only: never in the sea, lakes, shallows or rivers. */
+const dryLand = (world, i) => !BIOMES[world.tiles.biome[i]].water && !world.tiles.river[i] && tileCost(world.tiles, i) > 0;
+const spawnable = (world, i) => world.tiles.owner[i] === -1 && dryLand(world, i);
 const NATURAL = Object.entries(ANIMALS).filter(([, a]) => a.biomes.length);
 
 function landCount(world) {
@@ -64,6 +67,12 @@ export function stepAnimals(world, dt, rng, hotChunks) {
   if (!world._akinds) { world._akinds = true; for (const a of Object.values(world.animals)) if (!ANIMALS[a.kind]) delete world.animals[a.id]; } // kinds retired in v0.7
   if (!world._seeded) { world._seeded = true; const have = Object.keys(world.animals).length, want = wildTarget(world); if (have < want * 0.3) seedWildlife(world, rng, Math.round(want * 0.7) - have); }
   const tick = world._atick = ((world._atick || 0) + 1) % 1e9, CW = Math.ceil(W / CHUNK);
+  // anything that ended up in the water (dropped there by an event, flung, old saves) scrambles ashore or is lost
+  if (tick % 20 === 0) for (const a of Object.values(world.animals)) {
+    if (a.dead) continue; const i = Math.floor(a.y) * W + wrap(Math.floor(a.x), W); if (dryLand(world, i)) continue;
+    let to = null; for (let r = 1; r <= 6 && !to; r++) for (let k = 0; k < 12 && !to; k++) { const ang = k / 12 * Math.PI * 2, x = wrap(a.x + Math.cos(ang) * r, W), y = Math.min(world.H - 2, Math.max(1, a.y + Math.sin(ang) * r)); if (dryLand(world, Math.floor(y) * W + Math.floor(x))) to = [x, y]; }
+    if (to) { a.x = to[0]; a.y = to[1]; } else delete world.animals[a.id];
+  }
   // rebuild the crowding grid now and then: animals per kind per cell, for mates and carrying capacity
   if (!world._agrid || tick % 12 === 0) {
     const grid = new Map(); for (const a of Object.values(world.animals)) { if (a.dead) continue; const key = a.kind + '|' + Math.floor(a.x / CELL) + ',' + Math.floor(a.y / CELL); (grid.get(key) || grid.set(key, []).get(key)).push(a); }
@@ -146,7 +155,7 @@ function tryBreed(world, rng, a, A, t) {
 function move(world, a, ux, uy, step) {
   const nx = wrap(a.x + ux * step, world.W), ny = Math.min(world.H - 1, Math.max(1, a.y + uy * step));
   const i = Math.floor(ny) * world.W + Math.floor(nx);
-  const A = ANIMALS[a.kind], own = world.tiles.owner[i], cost = tileCost(world.tiles, i);
+  const A = ANIMALS[a.kind], own = world.tiles.owner[i], cost = dryLand(world, i) ? 1 : 0;
   // wild beasts keep to unowned land; summoned ones may also roam their patron's land; spirits and birds go anywhere on land
   if (cost > 0 && (own === -1 || a.angry || A.float || (a.patron && own === a.patron))) { a.x = nx; a.y = ny; a.moving = true; }
   else { a.vx = -a.vx; a.vy = -a.vy; }

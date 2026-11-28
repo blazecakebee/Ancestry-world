@@ -9,7 +9,9 @@ import { findPath, tileCost } from './pathfind.js';
 import { addThought, setSituational, gainXp, skillFactor, workSpeed, moveSpeed, isChild, changeOpinion, opinion, fullName, computeFx } from './pawn.js';
 import { needsTending, tend, isBleeding, MED_QUALITY, addDisease } from './health.js';
 import { pawnAttack, ANIMALS } from './combat.js';
-import { settlementBuildings, bCenter, pawnsNear, logEvent, emitFx, removeBuilding } from './world.js';
+import { settlementBuildings, bCenter, pawnsNear, logEvent, emitFx, removeBuilding, OBSTACLE } from './world.js';
+/** Trees, rocks and bushes still standing on a building's footprint. */
+export function siteObstacles(world, b) { const t = world.tiles, out = []; for (let oy = 0; oy < b.h; oy++) for (let ox = 0; ox < b.w; ox++) { const i = (b.y + oy) * world.W + wrap(b.x + ox, world.W); if (t.bld[i] === b.id && OBSTACLE.has(t.feat[i])) out.push(i); } return out; }
 import { doDismantle } from './orders.js';
 import { tempAt, cellAt } from '../world/atmosphere.js';
 import { ignite } from '../world/physics.js';
@@ -17,15 +19,18 @@ import { wrap, dist, dx, clamp } from '../core/util.js';
 import { DAY_LEN } from '../core/time.js';
 import { addItem, takeCat, dropItem, nearestDrop } from './items.js';
 import { toolSpeed, wearTool, upgradeFor, equipTool, craftChoice, craftTool } from './tools.js';
+import { HOBBIES, rollHobbies } from '../data/hobbies.js';
 /** Which tool a map feature is worked with. */
 const featTool = (f) => (f === F.TREE ? 'axe' : f === F.ROCK || f === F.ORE || f === F.GOLD ? 'pickaxe' : 'sickle');
 import { CROPS, ANIMAL_DROPS, cropKindAt, wildFruit, itemCat } from '../data/items.js';
 
+/** Can this people cross open water? Dugout canoes (tech), then sailing ships (Navigation). */
+export const boatLevel = (n) => (!n ? 0 : n.techs?.navigation ? 2 : n.techs?.canoes || n.era >= 2 ? 1 : 0);
 const tileIdx = (world, x, y) => Math.floor(y) * world.W + wrap(Math.floor(x), world.W);
 
 // ---------- movement ----------
 export function goTo(world, p, tx, ty, budget = 2500) {
-  const path = findPath(world.tiles, p.x, p.y, tx, ty, budget);
+  const path = findPath(world.tiles, p.x, p.y, tx, ty, budget, boatLevel(world.nations[p.nationId]));
   if (path === null) { p.path = null; return false; }
   p.path = path; p.pathI = 0;
   return true;
@@ -37,7 +42,7 @@ export function walk(world, p, dt) {
   const i = p.path[p.pathI];
   const tx = (i % W) + 0.5, ty = Math.floor(i / W) + 0.5;
   const ddx = dx(p.x, tx, W), ddy = ty - p.y, d = Math.hypot(ddx, ddy);
-  const cost = tileCost(world.tiles, tileIdx(world, p.x, p.y)) || 1;
+  const cost = tileCost(world.tiles, tileIdx(world, p.x, p.y), boatLevel(world.nations[p.nationId])) || 1;
   const step = (moveSpeed(p) / cost) * dt * (1 + (world.nations[p.nationId]?.techFx?.move || 0));
   if (Math.abs(ddx) > 0.01) p.facing = ddx > 0 ? 1 : -1;
   p.moving = true;
@@ -223,9 +228,10 @@ function stepPossessed(world, p, dt, ctx) {
   if (mx || my) {
     const len = Math.hypot(mx, my), sp = moveSpeed(p) * 1.15 * dt;
     const nx = wrap(p.x + (mx / len) * sp, world.W), ny = clamp(p.y + (my / len) * sp, 0.5, world.H - 0.5);
-    if (tileCost(world.tiles, tileIdx(world, nx, ny)) > 0) { p.x = nx; p.y = ny; }
-    else if (tileCost(world.tiles, tileIdx(world, nx, p.y)) > 0) p.x = nx;
-    else if (tileCost(world.tiles, tileIdx(world, p.x, ny)) > 0) p.y = ny;
+    const bl = boatLevel(world.nations[p.nationId]);
+    if (tileCost(world.tiles, tileIdx(world, nx, ny), bl) > 0) { p.x = nx; p.y = ny; }
+    else if (tileCost(world.tiles, tileIdx(world, nx, p.y), bl) > 0) p.x = nx;
+    else if (tileCost(world.tiles, tileIdx(world, p.x, ny), bl) > 0) p.y = ny;
     if (mx) p.facing = mx > 0 ? 1 : -1;
     p.moving = true; p.state = 'walk';
   } else p.state = 'idle';
@@ -314,6 +320,8 @@ export function chooseJob(world, p, ctx) {
   const { rng, s, n } = ctx;
   const now = world.time;
   if (!s) return { type: 'wander', until: now + 0.2 };
+  if (!p.likes) Object.assign(p, rollHobbies(p, rng));
+  if (p.act) p.act = null;
   if (p.carry && !p.carry.site) return { type: 'deliver' }; // empty your basket at the store before anything else
   { const up = upgradeFor(p, s); if (up) return { type: 'equip', item: up }; } // grab a better tool for your trade off the shelf
   const st = s.stock;
@@ -344,6 +352,8 @@ export function chooseJob(world, p, ctx) {
   if (patient && (p.skills.medical.lvl >= 3 || p.skills.medical.passion > 0 || isBleeding(patient))) return { type: 'doctor', pid: patient.id };
 
   if (p.needs.joy < 0.35 || (p.thoughts.some((t) => t.id === 'cold') && rng.chance(0.6))) return pickJoy(world, p, s, n, rng);
+  // evenings are free time: everyone drifts off to their own pastime, unless the larder is nearly empty
+  if (lt > 0.72 && lt < 0.9 && !p.squad && (st.food + st.meals) > ((s._pawns || []).length || 1) * 1.2 && rng.chance(0.55 - p.needs.joy * 0.25)) { const hj = pickHobby(world, p, s, n, rng, night); if (hj) return hj; }
   if (p.needs.social < 0.3 || rng.chance(0.04)) { const q = pawnsNear(world, p.x, p.y, 12).find((q) => q !== p && !q.dead && !q.downed && q.state !== 'sleep' && !q.brk); if (q) return { type: 'chat', pid: q.id, until: now + 0.08 }; }
   if (p.role === 'prophet' && rng.chance(0.5)) { const t = settlementBuildings(world, s, 'temple')[0]; if (t) return { type: 'preach', bid: t.id, until: now + 0.4 }; }
 
@@ -372,7 +382,10 @@ export function chooseJob(world, p, ctx) {
   }
   // construction: deliver materials, then build
   const sites = s.buildings.map((id) => world.buildings[id]).filter((b) => b && !b.built && !BUILDINGS[b.type].field);
-  for (const site of sites.slice(0, 3)) {
+  for (const site of [...sites.slice(0, 3), ...settlementBuildings(world, s, 'farm', false).filter((f) => !f.built).slice(0, 1)]) {
+    const obs = siteObstacles(world, site);
+    if (obs.length) { add({ type: 'clearsite', bid: site.id, i: rng.pick(obs) }, 'builder', 3.6 * (site.byPlayer ? 1.6 : 1)); if (BUILDINGS[site.type].field) continue; }
+    if (BUILDINGS[site.type].field) continue;
     const left = remainingCost(site), r = Object.keys(left).find((k) => (st[k] || 0) >= 1);
     if (r) add({ type: 'supply', bid: site.id, res: r }, 'builder', 3.2 * (focus === 'build' ? 2 : 1) * (site.byPlayer ? 1.6 : 1));
     else if (!Object.keys(left).length) add({ type: 'build', bid: site.id }, 'builder', 3.5 * pref('construction') * (focus === 'build' ? 2 : 1) * (site.byPlayer ? 1.6 : 1));
@@ -415,9 +428,85 @@ export function chooseJob(world, p, ctx) {
 }
 
 function pickJoy(world, p, s, n, rng) {
+  const hj = pickHobby(world, p, s, n, rng, false); if (hj) return hj;
   const spots = settlementBuildings(world, s).filter((b) => BUILDINGS[b.type].fn.joy || b.type === 'temple' || b.type === 'center');
   if (!spots.length) return { type: 'wander', until: world.time + 0.1, joy: true };
   return { type: 'relax', bid: rng.pick(spots).id, until: world.time + 0.18 };
+}
+
+// ---------- pastimes ----------
+const landAt = (world, i) => !BIOMES[world.tiles.biome[i]].water && world.tiles.bld[i] < 0;
+function scanTiles(world, x0, y0, r, pred, rng, tries = 70) {
+  const W = world.W; let best = null, bd = 1e9;
+  for (let k = 0; k < tries; k++) {
+    const x = Math.floor(x0 + rng.range(-r, r)), y = Math.floor(y0 + rng.range(-r, r)); if (y < 1 || y >= world.H - 1) continue;
+    const i = y * W + wrap(x, W); if (!pred(i, x, y)) continue;
+    const d = dist(x, y, x0, y0, W); if (d < bd) { bd = d; best = [x + 0.5, y + 0.5]; }
+  }
+  return best;
+}
+/** Where a pastime happens for this person right now (or null when there is nowhere to do it). */
+function hobbySpot(world, p, s, h, rng) {
+  const t = world.tiles, W = world.W;
+  const fire = settlementBuildings(world, s, 'campfire')[0] || world.buildings[s.buildings[0]];
+  const ring = (b, r = 1.8) => { const [x, y] = bCenter(b), a = rng.range(0, Math.PI * 2); return [x + Math.cos(a) * r, y + Math.sin(a) * r * 0.7]; };
+  switch (HOBBIES[h].spot) {
+    case 'fire': return fire ? ring(fire) : null;
+    case 'temple': { const b = settlementBuildings(world, s, 'temple')[0]; return b ? ring(b, 1.3) : null; }
+    case 'home': { const b = world.buildings[p.home] || fire; return b ? ring(b, 1.2) : null; }
+    case 'shore': return scanTiles(world, s.x, s.y, 18, (i) => {
+      if (h === 'swimming') return BIOMES[t.biome[i]].key === 'shallow' || (BIOMES[t.biome[i]].water && t.biome[i] !== 0 && tileCost(t, i) > 0);
+      if (!landAt(world, i)) return false; const x = i % W, y = (i / W) | 0;
+      return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([ox, oy]) => BIOMES[t.biome[(y + oy) * W + wrap(x + ox, W)]]?.water);
+    }, rng, 120);
+    case 'open': return scanTiles(world, s.x, s.y, 7, (i) => landAt(world, i) && t.feat[i] === F.NONE, rng);
+    case 'far': { const a = rng.range(0, Math.PI * 2), d = rng.range(14, 24); return scanTiles(world, s.x + Math.cos(a) * d, s.y + Math.sin(a) * d, 4, (i) => landAt(world, i) && tileCost(t, i) > 0, rng, 30); }
+    case 'berry': { const i = findFeature(world, p, [F.BERRY], 14, rng); return i >= 0 ? [(i % W) + 0.5, Math.floor(i / W) + 1.2] : null; }
+    case 'tree': { const i = findFeature(world, p, [F.TREE], 10, rng); return i >= 0 ? [(i % W) + 0.5, Math.floor(i / W) + 1.3] : null; }
+  }
+  return null;
+}
+/** Free time: join a lively gathering nearby, or go and do one of the things you love. */
+function pickHobby(world, p, s, n, rng, night) {
+  if (isChild(p)) return null;
+  const now = world.time;
+  const g = s._gather;
+  if (g && g.until > now && g.n < 9 && !(p.dislike === g.h) && rng.chance(p.likes.includes(g.h) ? 0.9 : 0.45)) {
+    g.n++; return { type: 'hobby', h: g.h, x: g.x + rng.range(-1.6, 1.6), y: g.y + rng.range(-1, 1), until: Math.max(g.until, now + 0.08), join: true };
+  }
+  const opts = p.likes.filter((h) => (!HOBBIES[h].night || night) && !(h === 'stargazing' && !night));
+  if (!opts.length) return null;
+  const h = rng.pick(opts), at = hobbySpot(world, p, s, h, rng);
+  if (!at) return null;
+  return { type: 'hobby', h, x: at[0], y: at[1], until: now + 0.12 + rng.range(0, 0.08) + (HOBBIES[h].spot === 'far' ? 0.15 : 0) };
+}
+function doHobby(world, p, dt, ctx, j) {
+  const { s, n, rng } = ctx, H = HOBBIES[j.h], now = world.time;
+  if (!H || now > j.until + 0.3) return true;
+  if (!j.here) { if (!arriveAt(world, p, j.x, j.y, dt, 0.7, 1800)) return false; j.here = true; j.start = now;
+    if (H.social && !j.join) s._gather = { h: j.h, x: j.x, y: j.y, until: now + 0.12, n: 1, by: p.id };
+  }
+  p.act = H.act; p.moving = false;
+  p.state = H.act === 'nap' ? 'sleep' : H.act === 'work' || H.act === 'spar' ? 'work' : 'idle';
+  if (H.act === 'spar') p.attackAnim = Math.max(p.attackAnim || 0, 0.4);
+  const loved = p.likes.includes(j.h);
+  p.needs.joy = Math.min(1, p.needs.joy + dt * (loved ? 3.2 : 1.8));
+  if (H.skill && p.skills[H.skill]) gainXp(p, H.skill, dt * 600);
+  if (H.social) {
+    const g = s._gather; if (g && g.h === j.h && dist(g.x, g.y, p.x, p.y, world.W) < 4) g.until = Math.max(g.until, now + 0.04);
+    p.needs.social = Math.min(1, (p.needs.social ?? 0.5) + dt * 2);
+  }
+  if (j.h === 'music') for (const q of pawnsNear(world, p.x, p.y, 4)) if (q !== p && !q.dead) q.needs.joy = Math.min(1, q.needs.joy + dt * 0.8);
+  if (j.h === 'fishing' && rng.chance(dt * 4)) { addItem(s, 'fish', 1); emitFx(world, { type: 'emote', pid: p.id, icon: 'food' }); }
+  if (j.h === 'gardening') { const i = Math.floor(j.y - 0.7) * world.W + wrap(Math.floor(j.x), world.W); if (world.tiles.feat[i] === F.BERRY && world.tiles.featHp[i] < 6 && rng.chance(dt * 6)) { world.tiles.featHp[i]++; world.dirty.add(i); } }
+  if (j.h === 'prayer') n.glitter += dt * 0.06 * (n.ownerId ? 1 : 0);
+  if (rng.chance(dt * 14)) emitFx(world, { type: 'emote', pid: p.id, icon: H.icon });
+  if (now >= j.until) {
+    const crowd = H.social ? pawnsNear(world, p.x, p.y, 4).filter((q) => q !== p && q.job?.type === 'hobby' && q.job.h === j.h).length : 0;
+    addThought(p, crowd >= 2 ? 'gathering' : loved ? 'lovedHobby' : 'freeTime', now);
+    p.act = null; return true;
+  }
+  return false;
 }
 
 const foodAvailable = (st) => st.meals >= 1 || st.rations >= 1 || st.food >= 1;
@@ -539,6 +628,24 @@ export function doJob(world, p, dt, ctx) {
   const done = () => { p.job = null; p.state = 'idle'; };
   switch (j.type) {
     case 'deliver': return done();
+    case 'clearsite': { // fell the tree / break the rock standing where the building goes; the logs & stone go home
+      const b = world.buildings[j.bid], t = world.tiles; if (!b || b.built) return done();
+      if (!OBSTACLE.has(t.feat[j.i]) || t.bld[j.i] !== b.id) { if (t.bld[j.i] === b.id && t.feat[j.i] !== F.BUILDING && t.feat[j.i] !== F.FARM) { t.feat[j.i] = BUILDINGS[b.type].field ? F.FARM : F.BUILDING; t.featHp[j.i] = 0; world.dirty.add(j.i); }
+        const next = siteObstacles(world, b); if (!next.length) return done(); j.i = next[0]; }
+      if (p.carry && carried(p) >= 8) { if (deliver(world, p, dt, ctx)) { /* back to the site */ } return; }
+      const tx = (j.i % world.W) + 0.5, ty = Math.floor(j.i / world.W) + 0.5;
+      if (!arriveAt(world, p, tx, ty + 0.9, dt, 1.3)) return;
+      p.state = 'work';
+      const f = t.feat[j.i];
+      if (f === F.STUMP || f === F.RUBBLE) { t.feat[j.i] = F.NONE; world.dirty.add(j.i); return; }
+      const tk = featTool(f);
+      j.t = (j.t || 0) + dt * workSpeed(p) * toolSpeed(p, tk) * 1.2;
+      if (j.t < 0.025) return; j.t = 0;
+      harvestTile(world, p, j.i, ctx); wearTool(world, p, tk);
+      if (t.feat[j.i] === F.STUMP) { t.feat[j.i] = F.NONE; world.dirty.add(j.i); } // roots grubbed out with the trunk
+      return;
+    }
+    case 'hobby': if (doHobby(world, p, dt, ctx, j)) { p.act = null; return done(); } return;
     case 'wander': {
       p.state = 'walk';
       if (!p.path || walk(world, p, dt)) { if (now > j.until) return done(); goTo(world, p, s ? s.x + rng.range(-s.radius * 0.7, s.radius * 0.7) : p.x + rng.range(-4, 4), s ? s.y + rng.range(-s.radius * 0.7, s.radius * 0.7) : p.y + rng.range(-4, 4), 400); }
@@ -652,7 +759,21 @@ export function doJob(world, p, dt, ctx) {
       }
       const w = eraOf(p.gearEra).weapon;
       const rng2 = w.ranged ? Math.min(w.range, 6) : 1.2;
-      if (dist(a.x, a.y, p.x, p.y, W) > rng2) { if (!p.path || (j.re = (j.re || 0) + dt) > 0.05) { j.re = 0; goTo(world, p, a.x, a.y, 600); } p.state = 'walk'; walk(world, p, dt); return; }
+      j.since ??= world.time;
+      if (world.time - j.since > 0.8) return done(); // the hunt drags on: give up and come home
+      if (dist(a.x, a.y, p.x, p.y, W) > rng2) {
+        if (!p.path || (j.re = (j.re || 0) + dt) > 0.05) {
+          j.re = 0;
+          if (!goTo(world, p, a.x, a.y, 1500)) { // can't reach this one (water, cliffs, someone's land): pick another quarry
+            (j.skip ||= []).push(a.id); j.aid = null; p.path = null;
+            if (j.skip.length > 3) return done();
+            let bd = 30, nb = null;
+            for (const an of Object.values(world.animals)) { if (an.dead || j.skip.includes(an.id) || ANIMALS[an.kind].noHunt) continue; const d = dist(an.x, an.y, p.x, p.y, W); if (d < bd) { bd = d; nb = an; } }
+            if (!nb) return done(); j.aid = nb.id; return;
+          }
+        }
+        p.state = 'walk'; walk(world, p, dt); return;
+      }
       p.path = null; p.state = 'fight';
       if ((p._atk = (p._atk || 0) - dt) <= 0) { p._atk = 0.03; const keep = p.role; if (w.ranged) p.role = 'soldier'; pawnAttack(world, p, a, rng); p.role = keep; gainXp(p, 'animals', 20); }
       return;
@@ -691,6 +812,7 @@ export function doJob(world, p, dt, ctx) {
       const [x, y] = bCenter(b);
       if (!arriveAt(world, p, x, y, dt, Math.max(b.w, b.h) / 2 + 0.8)) return;
       const def = BUILDINGS[b.type];
+      { const obs = siteObstacles(world, b); if (obs.length) { p.job = { type: 'clearsite', bid: b.id, i: obs[0] }; return; } } // clear the ground first
       if (!b.paid) { // materials must be carried to the site first
         const left = remainingCost(b);
         const r = Object.keys(left).find((k) => (s.stock[k] || 0) >= 1);
@@ -699,7 +821,7 @@ export function doJob(world, p, dt, ctx) {
         b.paid = true;
       }
       p.state = 'work';
-      const bp = (dt * workSpeed(p) * skillFactor(p, 'construction') * (1 + (n.techFx?.build || 0)) * toolSpeed(p, 'shovel') * 100) / Math.max(10, def.work * (1 + b.era * 0.15));
+      const bp = 1.6 * (dt * workSpeed(p) * skillFactor(p, 'construction') * (1 + (n.techFx?.build || 0)) * toolSpeed(p, 'shovel') * 100) / Math.max(10, def.work * (1 + b.era * 0.15));
       b.progress += bp; wearTool(world, p, 'shovel', bp * 12);
       gainXp(p, 'construction', 30);
       if (rng.chance(dt * 20)) emitFx(world, { type: 'chip', x, y, res: 'wood' });
@@ -798,7 +920,7 @@ export function doJob(world, p, dt, ctx) {
       const ws = workSpeed(p);
       if (j.type === 'research') {
         const rp = dt * 16 * ws * skillFactor(p, 'intellectual') * (1 + (p.fx.research || 0)) * (p.insp?.type === 'research' ? 3 : 1) * (BUILDINGS.research.fn.research / 2);
-        n.research += rp * ctx.researchMult; gainXp(p, 'intellectual', 80 * dt * 10);
+        n.research += rp * ctx.researchMult * 1.6; gainXp(p, 'intellectual', 80 * dt * 10);
       } else if (j.type === 'worship') {
         const g = dt * 4 * Math.max(0.1, 1 + (p.fx.glitter || 0)) * (1 - n.ideology.faith / 140) * ctx.glitterMult;
         n.glitter += g; n.devotion += g; p.needs.joy = Math.min(1, p.needs.joy + dt * 1.2);

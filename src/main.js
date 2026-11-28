@@ -13,7 +13,7 @@ import { loadCharacterPack } from './render/charpack.js';
 import { iconImg } from './render/miscart.js';
 import { audio } from './audio/audio.js';
 import { createWorld } from './sim/world.js';
-import { canPlace } from './sim/world.js';
+import { canPlace, placeCheck } from './sim/world.js';
 import { Session } from './net/session.js';
 import { serializeWorld, deserializeWorld } from './net/serialize.js';
 import { powerById } from './data/powers.js';
@@ -117,7 +117,7 @@ class App {
     if (cap) this.renderer.focus(cap.x, cap.y, 40); else this.renderer.focus(session.world.W / 2, session.world.H / 2, 2);
     this.setLoading(null);
     audio.play('era');
-    this.onTutorialDone = () => { const nn = this.session?.myNation; if (nn && !nn.flagSet) showFlagEditor(this, nn, { first: true }); };
+    this.onTutorialDone = () => { const nn = this.session?.myNation; if (nn && !nn.flagSet && !(this.session.mode === 'client' && nn.flag)) showFlagEditor(this, nn, { first: true }); };
     if (!this.tutorial.start()) this.onTutorialDone();
   }
   quitToMenu() {
@@ -427,12 +427,15 @@ class App {
       const def = BUILDINGS[this.buildType], x0 = Math.floor(x - def.w / 2 + 0.5), y0 = Math.floor(y - def.h / 2 + 0.5);
       const s = this.nearestOwnSettlement(x, y);
       const n = s ? w.nations[s.nationId] : this.session.myNation;
-      r.ghost = { x: x0, y: y0, w: def.w, h: def.h, ok: !!s && canPlace(w, s, this.buildType, x0, y0) && dist(x, y, s.x, s.y, w.W) <= s.radius + 4, type: this.buildType, cost: buildCost(def, n?.era || 0), stock: s?.stock };
+      const chk = s ? placeCheck(w, s, this.buildType, x0, y0) : { ok: false, reason: 'Build near one of your settlements.', bad: [], gap: [], clear: [] };
+      const inRange = !!s && dist(x, y, s.x, s.y, w.W) <= s.radius + 4;
+      if (s && !inRange && chk.ok) { chk.ok = false; chk.reason = 'Too far from the settlement.'; }
+      r.ghost = { x: x0, y: y0, w: def.w, h: def.h, ok: chk.ok, chk, type: this.buildType, cost: buildCost(def, n?.era || 0), stock: s?.stock };
     }
     if (this.tool === 'power' && this.armed) {
       const P = powerById[this.armed]; const own = w.tiles.owner[Math.floor(clamp(y, 0, w.H - 1)) * w.W + Math.floor(wrap(x, w.W))];
       const n = this.session.myNation;
-      const ok = own === -1 || own === n?.id || !!w.nations[own]?.perms?.[this.session.pid]?.miracles;
+      const ok = own === -1 || own === n?.id || !w.nations[own]?.ownerId || !!w.nations[own]?.perms?.[this.session.pid]?.miracles;
       r.powerPreview = { x, y, r: P.radius || (P.target === 'settlement' ? 6 : 1), ok };
       setCursor(ok ? 'target' : 'deny');
     }

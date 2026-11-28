@@ -117,14 +117,28 @@ export function foundSettlement(world, nation, x, y, capital = false) {
   return s;
 }
 
+/** Hash noise for ragged, natural-looking borders. */
+const bnoise = (x, y) => { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+const smoothN = (x, y) => { const s = 5, x0 = Math.floor(x / s), y0 = Math.floor(y / s), fx = x / s - x0, fy = y / s - y0; const a = bnoise(x0, y0), b = bnoise(x0 + 1, y0), c = bnoise(x0, y0 + 1), d = bnoise(x0 + 1, y0 + 1); return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy; };
+/**
+ * A settlement's land grows steadily outward into unclaimed country (its "reach"), with ragged borders that
+ * follow the lie of the land: it pushes further over plains than over hills and stops at the sea.
+ * Land already held by another people is never taken here (that is what wars are for).
+ */
 export function claimTerritory(world, s) {
   const t = world.tiles, { W, H } = world;
-  const r = Math.floor(s.radius);
+  const R = Math.max(s.radius, s.reach || 0), r = Math.ceil(R * 1.25);
   for (let oy = -r; oy <= r; oy++) for (let ox = -r; ox <= r; ox++) {
-    if (ox * ox + oy * oy > r * r) continue;
     const y = s.y + oy; if (y < 0 || y >= H) continue;
-    const i = y * W + wrap(s.x + ox, W);
-    if (t.owner[i] === -1) { t.owner[i] = s.nationId; world.dirty.add(i); }
+    const x = wrap(s.x + ox, W), i = y * W + x;
+    if (t.owner[i] !== -1) continue;
+    const d = Math.sqrt(ox * ox + oy * oy);
+    if (d > s.radius) {
+      if (isWater(t.biome[i])) continue;
+      const rough = BIOMES[t.biome[i]].cost || 9; // hills and swamps slow the spread
+      if (d > R * (0.78 + smoothN(x, y) * 0.44) / Math.max(1, Math.sqrt(rough))) continue;
+    }
+    t.owner[i] = s.nationId; world.dirty.add(i);
   }
 }
 
@@ -133,18 +147,38 @@ export function releaseTerritory(world, nationId, newOwner = -1) {
   for (let i = 0; i < t.N; i++) if (t.owner[i] === nationId) { t.owner[i] = newOwner; world.dirty.add(i); }
 }
 
-export function canPlace(world, s, type, x0, y0, ignoreOwner = false) {
+/** Obstacles a crew clears before building: they are felled / broken up first, not bulldozed. */
+export const OBSTACLE = new Set([F.TREE, F.ROCK, F.ORE, F.GOLD, F.BERRY, F.STUMP, F.RUBBLE].filter((v) => v !== undefined));
+/**
+ * Where can a building go? Every building needs its footprint plus a one-tile gap all round free of other buildings
+ * (fields may sit side by side). Trees, rocks and bushes are fine: the builders clear them first.
+ * Returns { ok, reason, bad: [tiles], gap: [tiles], clear: [tiles] } for the placement preview.
+ */
+export function placeCheck(world, s, type, x0, y0, ignoreOwner = false) {
   const t = world.tiles, def = BUILDINGS[type], { W, H } = world;
+  const out = { ok: true, reason: '', bad: [], gap: [], clear: [] };
+  const fail = (i, why) => { out.ok = false; out.bad.push(i); out.reason ||= why; };
   for (let oy = 0; oy < def.h; oy++) for (let ox = 0; ox < def.w; ox++) {
-    const y = y0 + oy; if (y < 1 || y >= H - 1) return false;
+    const y = y0 + oy; if (y < 1 || y >= H - 1) { out.ok = false; out.reason ||= 'Too close to the edge of the world.'; continue; }
     const i = y * W + wrap(x0 + ox, W), b = t.biome[i];
-    if (isWater(b) || t.river[i] || b === B.PEAK) return false;
-    if (t.feat[i] === F.BUILDING || t.feat[i] === F.FARM || t.feat[i] === F.CROP_READY || t.bld[i] >= 0) return false;
-    if (!ignoreOwner && t.owner[i] !== s.nationId && t.owner[i] !== -1) return false;
-    if (def.field && BIOMES[b].fert < 0.12 && world.nations[s.nationId].era < 8) return false;
+    if (isWater(b) || t.river[i]) { fail(i, 'Cannot build on water.'); continue; }
+    if (b === B.PEAK) { fail(i, 'Too steep: mountain peaks.'); continue; }
+    if (t.feat[i] === F.BUILDING || t.feat[i] === F.FARM || t.feat[i] === F.CROP_READY || t.bld[i] >= 0) { fail(i, 'Something is already built here.'); continue; }
+    if (!ignoreOwner && t.owner[i] !== s.nationId && t.owner[i] !== -1) { fail(i, 'That land belongs to another people.'); continue; }
+    if (def.field && BIOMES[b].fert < 0.12 && world.nations[s.nationId].era < 8) { fail(i, 'The soil is too poor for a field.'); continue; }
+    if (OBSTACLE.has(t.feat[i])) out.clear.push(i);
   }
-  return true;
+  // breathing room: no other building directly beside it
+  for (let oy = -1; oy <= def.h; oy++) for (let ox = -1; ox <= def.w; ox++) {
+    if (oy >= 0 && oy < def.h && ox >= 0 && ox < def.w) continue;
+    const y = y0 + oy; if (y < 0 || y >= H) continue;
+    const i = y * W + wrap(x0 + ox, W), id = t.bld[i]; if (id < 0) continue;
+    const other = world.buildings[id]; if (def.field && other && BUILDINGS[other.type]?.field) continue;
+    out.gap.push(i); out.ok = false; out.reason ||= 'Needs a free tile of space around it: too close to another building.';
+  }
+  return out;
 }
+export function canPlace(world, s, type, x0, y0, ignoreOwner = false) { return placeCheck(world, s, type, x0, y0, ignoreOwner).ok; }
 
 export function placeBuilding(world, s, type, x0, y0, force = false) {
   if (!force && !canPlace(world, s, type, x0, y0)) return null;
@@ -155,7 +189,8 @@ export function placeBuilding(world, s, type, x0, y0, force = false) {
   world.buildings[id] = b; s.buildings.push(id);
   for (let oy = 0; oy < def.h; oy++) for (let ox = 0; ox < def.w; ox++) {
     const i = (y0 + oy) * W + wrap(x0 + ox, W);
-    t.feat[i] = def.field ? F.FARM : F.BUILDING; t.featHp[i] = 0; t.bld[i] = id; t.crop[i] = 0;
+    t.bld[i] = id; t.crop[i] = 0;
+    if (force || !OBSTACLE.has(t.feat[i])) { t.feat[i] = def.field ? F.FARM : F.BUILDING; t.featHp[i] = 0; } // trees & rocks stay until the builders clear them
     if (t.owner[i] === -1) t.owner[i] = s.nationId;
     world.dirty.add(i);
   }
@@ -172,8 +207,8 @@ export function placeBuildingNear(world, s, type, cx, cy, force = false, maxR = 
       const ang = rng.next() * Math.PI * 2;
       const x0 = Math.round(cx + Math.cos(ang) * r - def.w / 2), y0 = Math.round(cy + Math.sin(ang) * r - def.h / 2);
       if (!canPlace(world, s, type, x0, y0)) continue;
-      // keep a 1-tile gap between buildings for paths
-      let crowd = 0;
+      // the gap is enforced by canPlace; prefer spots that need little clearing
+      let crowd = placeCheck(world, s, type, x0, y0).clear.length * 0.6;
       for (let oy = -1; oy <= def.h; oy++) for (let ox = -1; ox <= def.w; ox++) { const y = y0 + oy; if (y < 0 || y >= world.H) continue; const i = y * world.W + wrap(x0 + ox, world.W); if (t.feat[i] === F.BUILDING) crowd++; }
       let score = -r * 1.5 - crowd * (def.field ? 0.5 : 4);
       if (def.field) { const i = (y0 + 1) * world.W + wrap(x0 + 1, world.W); score += BIOMES[t.biome[i]].fert * 12; }

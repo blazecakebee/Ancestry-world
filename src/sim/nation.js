@@ -55,10 +55,12 @@ export function stepSettlement(world, s, dt, rng) {
   }
   s.mood = pawns.length ? moodSum / pawns.length : 50;
   // passive research (curiosity of the people)
-  n.research += pawns.length * 0.45 * dt * m.researchMult;
+  n.research += pawns.length * 0.8 * dt * m.researchMult;
   // territory
   s.radius = 6 + Math.sqrt(s.pop) * 1.4 + (n.era * 0.4);
-  if ((s._terr = (s._terr || 0) + dt) > 1) { s._terr = 0; claimTerritory(world, s); }
+  // borders creep outward all the time, faster for bigger and more advanced peoples
+  s.reach = Math.min(12 + Math.sqrt(pawns.length) * 4.5 + n.era * 3, (s.reach || s.radius) + dt * (1.6 + pawns.length * 0.05 + n.era * 0.15));
+  if ((s._terr = (s._terr || 0) + dt) > 0.25) { s._terr = 0; claimTerritory(world, s); }
   // pollution from industry
   if (n.era >= 6 && n.ideology.nature < 30) {
     s.pollution = clamp(s.pollution + dt * (settlementBuildings(world, s, 'factory').length * 4 + 1) - (n.ideology.nature > 0 ? 3 * dt : 0), 0, 255);
@@ -69,7 +71,9 @@ export function stepSettlement(world, s, dt, rng) {
   // crops grow
   growCrops(world, s, n, dt);
   // planner
-  if (world.time - s.lastPlan > 0.25) { s.lastPlan = world.time; planBuildings(world, s, n, rng); }
+  if (world.time - s.lastPlan > 0.12) { s.lastPlan = world.time; planBuildings(world, s, n, rng); }
+  // newcomers: wandering families hear of a well-fed, happy town and settle there (the main way young towns grow)
+  if ((s._imm = (s._imm || 0) + dt) > 1) { const span = s._imm; s._imm = 0; tryImmigrants(world, s, n, pawns, rng, span); }
   // births
   if ((s._birth = (s._birth || 0) + dt) > 0.2) { const span = s._birth; s._birth = 0; tryBirths(world, s, n, pawns, rng, span); }
 }
@@ -133,7 +137,7 @@ function planBuildings(world, s, n, rng) {
   const pop = s.pop, era = n.era, a = n.ideology;
   const want = [];
   const housing = s.housing || 0;
-  if (housing < pop + 3) want.push(['hut', 10]);
+  if (housing < pop + 5) want.push(['hut', housing < pop + 1 ? 14 : 10]); // always build homes ahead of the next births
   if (countB(world, s, 'campfire') < 1 && era < 6) want.push(['campfire', 9]);
   if (countB(world, s, 'storage') < 1 + Math.floor(pop / 25)) want.push(['storage', 7]);
   if (countB(world, s, 'research') < 1 + Math.floor(pop / 18)) want.push(['research', 6 + (a.faith > 0 ? 2 : 0)]);
@@ -166,21 +170,43 @@ function planBuildings(world, s, n, rng) {
   if (b) { b.era = era; b.placedAt = world.time; }
 }
 
+function tryImmigrants(world, s, n, pawns, rng, span) {
+  if (n.dead || s.siege) return;
+  const pop = pawns.length, housing = s.housing || 0, food = (s.stock.food || 0) + (s.stock.meals || 0) + (s.stock.rations || 0);
+  if (pop >= housing + 3 || food < pop * 1.5 || (s.mood ?? 50) < 40 || pop > 60) return;
+  const pull = (pop < 12 ? 0.55 : pop < 30 ? 0.3 : 0.15) * ((s.mood ?? 50) / 60) * span;
+  if (!rng.chance(pull)) return;
+  // a couple, sometimes with a child or a friend, walks in from the edge of the land
+  const ang = rng.range(0, Math.PI * 2), d = s.radius + 4;
+  const x = s.x + Math.cos(ang) * d, y = Math.max(2, Math.min(world.H - 3, s.y + Math.sin(ang) * d));
+  const race = rng.chance(0.85) ? (n.race || 'human') : rng.pick(['human', 'elf', 'orc']);
+  const grp = [];
+  const mk = (sex, age) => { const p = createPawn(rng, { lang: n.lang, race, nationId: n.id, settlementId: s.id, x: x + rng.range(-1, 1), y: y + rng.range(-1, 1), age, sex }); p.gearEra = n.era; world.pawns[p.id] = p; grp.push(p); return p; };
+  const a = mk('m', rng.range(18, 34)), b = mk('f', rng.range(18, 34));
+  if (rng.chance(0.75)) { a.spouse = b.id; b.spouse = a.id; a.rel[b.id] = 60; b.rel[a.id] = 60; b.family = a.family; }
+  if (rng.chance(0.35)) mk(rng.chance(0.5) ? 'm' : 'f', rng.range(4, 12));
+  else if (rng.chance(0.3)) mk(rng.chance(0.5) ? 'm' : 'f', rng.range(18, 30));
+  logEvent(world, 'birth', `${grp.length} wanderers came to ${s.name} and made it their home.`, { nationId: n.id, x: s.x, y: s.y });
+  emitFx(world, { type: 'emote', pid: a.id, icon: 'house' });
+}
+
 function tryBirths(world, s, n, pawns, rng, span) {
   const housing = s.housing || 0;
-  if (pawns.length >= housing + 2) return;
+  if (pawns.length >= housing + 4) return;
   const fert = s.until.fertility > world.time ? 4 : 1;
   for (const f of pawns) {
-    if (f.sex !== 'f' || f.age < 18 || f.age > 44 || f.spouse < 0 || (f.fx.fertility || 0) <= -1) continue;
-    const m = world.pawns[f.spouse];
+    const mateId = f.spouse >= 0 ? f.spouse : f.lover;
+    if (f.sex !== 'f' || f.age < 17 || f.age > 44 || !(mateId >= 0) || (f.fx.fertility || 0) <= -1) continue;
+    const m = world.pawns[mateId];
     if (!m || m.dead || m.sex !== 'm' || (m.fx.fertility || 0) <= -1 || m.settlementId !== s.id) continue;
-    const young = f.children.filter((id) => world.pawns[id] && world.pawns[id].age < 2).length;
+    const young = f.children.filter((id) => world.pawns[id] && world.pawns[id].age < (f.race === 'orc' ? 0.5 : 1)).length;
     if (young) continue;
-    const chance = 0.1 * (1 + (f.fx.fertility || 0) + (m.fx.fertility || 0) * 0.5) * fert * (s.mood / 55) * (world.age?.id === 'hope' ? 1.3 : 1) * span * 5 / DAY_LEN;
+    const chance = 0.26 * (1 + (f.fx.fertility || 0) + (m.fx.fertility || 0) * 0.5) * fert * (s.mood / 55) * (world.age?.id === 'hope' ? 1.3 : 1) * span * 5 / DAY_LEN;
     if (!rng.chance(chance)) continue;
     const c = createChild(rng, f, m, n.lang);
     c.gearEra = n.era;
     world.pawns[c.id] = c;
+    if (f.race === 'orc' && rng.chance(0.35)) { const c2 = createChild(rng, f, m, n.lang); c2.gearEra = n.era; world.pawns[c2.id] = c2; n.stats.births++; } // orc litters: twins are common
     n.stats.births++;
     addThought(f, 'newChild', world.time); addThought(m, 'newChild', world.time);
     logEvent(world, 'birth', `${fullName(c)} was born to ${f.name} and ${m.name}.`, { pid: c.id, nationId: n.id, x: f.x, y: f.y });
@@ -306,9 +332,10 @@ function familyOf(world, p) {
 
 function expansion(world, n, pawns, rng) {
   const settlements = Object.values(world.settlements).filter((s) => s.nationId === n.id);
-  const crowded = settlements.find((s) => s.pop > 26 + n.era * 3);
-  const expChance = 0.25 * (1 - n.ideology.reach / 120);
-  if (crowded && rng.chance(expChance) && settlements.length < 2 + n.era * 2) {
+  // a growing people keeps spreading: once a town passes a dozen-odd souls, a family group heads off to found the next
+  const crowded = settlements.find((s) => s.pop > 12 + n.era * 2);
+  const expChance = 0.5 * (1 - n.ideology.reach / 160);
+  if (crowded && rng.chance(expChance) && settlements.length < 3 + n.era * 3) {
     const site = findNewSite(world, crowded.x, crowded.y, 18, 42, rng);
     if (!site) return;
     const settlers = [];

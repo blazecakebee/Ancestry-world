@@ -80,7 +80,7 @@ export class Session extends EventBus {
         for (const i of d) { this.modified.add(i); this.pendingTiles.add(i); }
         this.emit('tiles', d);
       }
-      if (this.mode === 'host' && this.peers.size) { this.snapTimer += dt; if (this.snapTimer >= 0.2) { this.snapTimer = 0; this.broadcast(); } }
+      if (this.mode === 'host' && this.peers.size) { this.snapTimer += dt; if (this.snapTimer >= 0.1) { this.snapTimer = 0; this.broadcast(); /* 10 snapshots a second */ } }
     }
   }
 
@@ -145,11 +145,11 @@ export class Session extends EventBus {
     const gone = this.prevIds ? [...this.prevIds].filter((id) => !ids.has(id)) : [];
     this.prevIds = ids;
     const tiles = [...this.pendingTiles].map((i) => tileRecord(w.tiles, i)); this.pendingTiles.clear();
-    const water = this.snapN % 5 === 0 ? [...w.waterActive].slice(0, 4000).map((i) => [i, Math.round(w.tiles.water[i] * 100)]) : null;
+    const water = this.snapN % 10 === 0 ? [...w.waterActive].slice(0, 4000).map((i) => [i, Math.round(w.tiles.water[i] * 100)]) : null;
     const fire = [...w.fireActive].slice(0, 3000).map((i) => [i, w.tiles.fire[i]]);
     const common = { t: 'snap', time: w.time, speed: w.speed, paused: w.paused, age: w.age, fast: Object.values(w.pawns).map(pawnFast), gone, tiles, water, fire,
       animals: null };
-    if (this.snapN % 5 === 0) Object.assign(common, this.slowState());
+    if (this.snapN % 10 === 0) Object.assign(common, this.slowState());
     if (this.snapN % 10 === 0) common.atmo = atmoPacket(w.atmo);
     const all = Object.values(w.pawns);
     for (const [wsId, peer] of this.peers) {

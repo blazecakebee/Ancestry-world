@@ -22,7 +22,7 @@ import { tileCost } from './pathfind.js';
 import { ignite } from '../world/physics.js';
 import { meteor } from './events.js';
 import { SKILLS } from '../data/society.js';
-import { canPlace, placeBuilding, removeBuilding, foundNation, takeSite, logEvent, emitFx, settlementBuildings, bCenter } from './world.js';
+import { canPlace, placeCheck, placeBuilding, removeBuilding, foundNation, takeSite, logEvent, emitFx, settlementBuildings, bCenter } from './world.js';
 import { rel, setWar, setPeace, setAlliance } from './war.js';
 import { CS, cellAt } from '../world/atmosphere.js';
 import { wrap, dist, clamp } from '../core/util.js';
@@ -36,6 +36,7 @@ export function allowed(world, pid, nid, perm) {
   if (nid === -1 || nid === undefined) return perm === 'miracles';
   const n = world.nations[nid]; if (!n) return false;
   if (n.ownerId === pid) return true;
+  if (!n.ownerId && perm === 'miracles') return true; // computer-run peoples are fair game for any god; other players must consent
   return !!n.perms?.[pid]?.[perm];
 }
 export const tierOf = (n) => TIERS.reduce((t, x) => (n.devotion >= x.devotion ? x.tier : t), 1);
@@ -76,7 +77,7 @@ export function applyCommand(world, pid, cmd, rng) {
       if (!def || cmd.building === 'center') return fail('Not available.');
       if (!canBuildType(n, cmd.building)) return fail(def.era > n.era ? 'Not available in this era.' : `Needs ${TECH[BUILD_TECH[cmd.building]]?.name || 'research'} first.`);
       if (dist(cmd.x, cmd.y, s.x, s.y, world.W) > s.radius + 4) return fail('Too far from the settlement.');
-      if (!canPlace(world, s, cmd.building, cmd.x, cmd.y)) return fail('Cannot build there.');
+      { const chk = placeCheck(world, s, cmd.building, cmd.x, cmd.y); if (!chk.ok) return fail(chk.reason || 'Cannot build there.'); }
       const b = placeBuilding(world, s, cmd.building, cmd.x, cmd.y); b.byPlayer = true; b.era = n.era;
       return ok();
     }

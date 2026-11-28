@@ -8,7 +8,7 @@ export const RACES = {
     desc: 'Long-lived, graceful and patient. Love the wild woods; slow to breed and slow to anger.',
     fx: { lifespan: 55, research: 0.12, speed: 0.08, fertility: -0.4, melee: -0.1, glitter: 0.1 }, ideo: { nature: 40, war: 15 } },
   orc: { name: 'Orcs', adj: 'Orcish', color: '#6cc26a', weight: 0.2,
-    desc: 'Hardy, fierce and fertile. Born warriors who shrug off wounds, though their scholars are few.',
-    fx: { melee: 0.3, hp: 0.2, fertility: 0.5, research: -0.12, lifespan: -14, hunger: 0.2 }, ideo: { war: -40, faith: -10 } },
+    desc: 'Hardy, fierce and very fertile: orc families grow fast and twins are common. Born warriors who shrug off wounds, though their scholars are few.',
+    fx: { melee: 0.3, hp: 0.2, fertility: 1.4, research: -0.12, lifespan: -14, hunger: 0.2 }, ideo: { war: -40, faith: -10 } },
 };
 export const RACE_IDS = Object.keys(RACES);

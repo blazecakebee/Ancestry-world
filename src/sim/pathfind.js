@@ -12,8 +12,10 @@ class Heap {
   get size() { return this.a.length; }
 }
 
-export function tileCost(t, i) {
+/** boat: 0 = on foot only, 1 = canoes (lakes & seas, slowish), 2 = sailing ships (fast). */
+export function tileCost(t, i, boat = 0) {
   const bm = BIOMES[t.biome[i]];
+  if (boat && bm.water) return boat >= 2 ? 0.7 : 1.15; // paddle or sail across open water
   let c = bm.cost;
   if (t.river[i]) c = Math.max(c, 3);
   if (c === 0) return 0;
@@ -25,12 +27,12 @@ export function tileCost(t, i) {
 
 const gScore = new Map();
 const came = new Map();
-export function findPath(t, sx, sy, gx, gy, maxNodes = 2500) {
+export function findPath(t, sx, sy, gx, gy, maxNodes = 2500, boat = 0) {
   const { W, H } = t;
   sx = wrap(Math.floor(sx), W); sy = Math.floor(sy); gx = wrap(Math.floor(gx), W); gy = Math.floor(gy);
   const start = sy * W + sx, goal = gy * W + gx;
   if (start === goal) return [];
-  if (tileCost(t, goal) === 0) return null;
+  if (tileCost(t, goal, boat) === 0) return null;
   const h = (i) => { const x = i % W, y = (i / W) | 0; let d = Math.abs(x - gx); if (d > W / 2) d = W - d; return (d + Math.abs(y - gy)) * 0.95; };
   gScore.clear(); came.clear();
   const open = new Heap(); open.push(start, h(start)); gScore.set(start, 0);
@@ -43,8 +45,8 @@ export function findPath(t, sx, sy, gx, gy, maxNodes = 2500) {
       const ox = [1, -1, 0, 0, 1, 1, -1, -1][k], oy = [0, 0, 1, -1, 1, -1, 1, -1][k];
       const ny = cy + oy; if (ny < 0 || ny >= H) continue;
       const nb = ny * W + wrap(cx + ox, W);
-      const c = tileCost(t, nb); if (c === 0) continue;
-      if (k >= 4 && (tileCost(t, cy * W + wrap(cx + ox, W)) === 0 || tileCost(t, ny * W + cx) === 0)) continue; // no corner cutting
+      const c = tileCost(t, nb, boat); if (c === 0) continue;
+      if (k >= 4 && (tileCost(t, cy * W + wrap(cx + ox, W), boat) === 0 || tileCost(t, ny * W + cx, boat) === 0)) continue; // no corner cutting
       const ng = g + c * (k >= 4 ? 1.414 : 1);
       if (ng < (gScore.get(nb) ?? Infinity)) {
         gScore.set(nb, ng); came.set(nb, cur);

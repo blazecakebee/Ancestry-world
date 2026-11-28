@@ -8,6 +8,7 @@ import { TRAITS } from '../data/traits.js';
 import { SKILLS, THOUGHTS, AXES, GOVERNMENTS, BREAK_LABELS } from '../data/society.js';
 import { BUILDINGS, BUILD_ORDER, buildingName, RESOURCES, RES_LABEL } from '../data/buildings.js';
 import { TOOL_KINDS, TOOL_MATS, TOOL_ORDER, toolId, toolName } from '../data/tools.js';
+import { HOBBIES } from '../data/hobbies.js';
 import { RACES } from '../data/races.js';
 import { PARTS, DISEASES } from '../sim/health.js';
 import { relationLabel, fullName } from '../sim/pawn.js';
@@ -411,6 +412,8 @@ export class HUD {
           p.insp ? h('div', { class: 'chip', style: { color: 'var(--accent)' } }, 'Inspired!') : null,
           h('div', { class: 'grid-2' }, ['food', 'rest', 'joy', 'social'].map((k) => h('div', {}, h('div', { class: 'tiny muted', style: { textTransform: 'capitalize' } }, k === 'food' ? 'Hunger' : k), bar(p.needs?.[k] ?? 0.5, (p.needs?.[k] ?? 1) < 0.25 ? 'bad' : '')))),
           h('b', {}, 'Traits'), h('div', {}, (p.traits || []).map((t) => TRAITS[t] && h('span', { class: 'trait', style: { color: TRAITS[t].color, borderColor: TRAITS[t].color }, tip: TRAITS[t].desc }, TRAITS[t].name))),
+          p.likes ? h('b', {}, 'Pastimes') : null,
+          p.likes ? h('div', {}, p.likes.map((k) => HOBBIES[k] && h('span', { class: 'trait', style: { color: '#9fe6a0', borderColor: '#9fe6a0' }, tip: `Loves ${HOBBIES[k].name.toLowerCase()}: ${HOBBIES[k].desc} in free time.` }, '♥ ' + HOBBIES[k].name)), HOBBIES[p.dislike] ? h('span', { class: 'trait', style: { color: '#ff9a90', borderColor: '#ff9a90' }, tip: 'Never joins in with this.' }, '✕ ' + HOBBIES[p.dislike].name) : null, p.act && p.job?.h && HOBBIES[p.job.h] ? h('div', { class: 'tiny muted' }, `Right now: ${HOBBIES[p.job.h].desc}.`) : null) : null,
           h('b', {}, 'Thoughts'), h('div', {}, (p.thoughts || []).slice(0, 14).map((t) => THOUGHTS[t.id] && h('div', { class: 'thought' }, h('span', {}, THOUGHTS[t.id].label), h('b', { class: THOUGHTS[t.id].mood >= 0 ? 'pos' : 'neg' }, (THOUGHTS[t.id].mood >= 0 ? '+' : '') + Math.round(THOUGHTS[t.id].mood * (t.m || 1))))), !(p.thoughts || []).length ? h('div', { class: 'small muted' }, 'Nothing much on their mind.') : null),
         );
       }

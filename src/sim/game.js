@@ -67,7 +67,7 @@ export class Game {
     for (const n of Object.values(w.nations)) mults[n.id] = nationMults(w, n);
     for (const p of Object.values(w.pawns)) {
       if (p.dead) { if (w.time - p.diedAt > 1.5) delete w.pawns[p.id]; continue; }
-      p.age += dt / w.yearLen;
+      p.age += (dt / w.yearLen) * (p.age < 16 ? 3 : 1); // childhood passes quickly: children come of age in about five years
       const s = w.settlements[p.settlementId], n = w.nations[p.nationId];
       const ctx = { rng, s, n, inBed: p.bedIn >= 0, envStress: p._env, researchMult: mults[p.nationId]?.researchMult || 1, glitterMult: mults[p.nationId]?.glitterMult || 1 };
       if (tick % 3 === 0) {

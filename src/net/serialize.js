@@ -64,7 +64,7 @@ export function deserializeWorld(s) {
 // ---------------- network snapshots ----------------
 const STATE_CODE = { idle: 0, walk: 1, work: 2, fight: 3, sleep: 4, eat: 5, downed: 6, dead: 7, break: 8, held: 9, flee: 10 };
 const STATE_NAME = Object.fromEntries(Object.entries(STATE_CODE).map(([k, v]) => [v, k]));
-export const CARD_KEYS = ['id', 'name', 'family', 'sex', 'race', 'age', 'look', 'nationId', 'settlementId', 'role', 'gearEra', 'traits', 'mood', 'possessedBy', 'parents', 'children', 'spouse', 'lover', 'lifespan', 'deathCause', 'dressed', 'work', 'tools', 'toolOut'];
+export const CARD_KEYS = ['id', 'name', 'family', 'sex', 'race', 'age', 'look', 'nationId', 'settlementId', 'role', 'gearEra', 'traits', 'mood', 'possessedBy', 'parents', 'children', 'spouse', 'lover', 'lifespan', 'deathCause', 'dressed', 'work', 'tools', 'toolOut', 'likes', 'dislike', 'act'];
 
 export function pawnCard(p) { const c = {}; for (const k of CARD_KEYS) c[k] = p[k]; c.fx = p.fx; return c; }
 export function pawnFast(p) {
@@ -93,7 +93,12 @@ export function applyFast(world, arr) {
   for (const r of arr) {
     const p = world.pawns[r[0]]; if (!p) continue;
     seen.add(r[0]);
-    p.x = r[1] / 100; p.y = r[2] / 100; p.state = STATE_NAME[r[3]] || 'idle';
+    // remember how fast they were going, so the client can glide them between snapshots instead of hopping
+    const nx = r[1] / 100, ny = r[2] / 100, now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (p._st !== undefined) { const dts = Math.max(0.03, (now - p._st) / 1000); let ddx = nx - p.x; if (ddx > world.W / 2) ddx -= world.W; if (ddx < -world.W / 2) ddx += world.W;
+      const vx = ddx / dts, vy = (ny - p.y) / dts; const ok = Math.abs(vx) < 40 && Math.abs(vy) < 40; p._vx = ok ? vx : 0; p._vy = ok ? vy : 0; }
+    p._st = now;
+    p.x = nx; p.y = ny; p.state = STATE_NAME[r[3]] || 'idle';
     p.carry = r[7] ? { item: r[7] } : null; if (r[8]) p.work = r[8];
     p.downed = !!(r[4] & 1); p.dead = !!(r[4] & 2); p.attackAnim = r[4] & 4 ? 1 : 0; p.brk = r[4] & 8 ? (p.brk || { type: 'sadWander' }) : null; p.facing = r[4] & 32 ? -1 : 1; p.heldBy = r[4] & 64 ? (p.heldBy || 1) : null;
     p.hp = r[5]; p.mood = r[6];

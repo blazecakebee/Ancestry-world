@@ -2,6 +2,23 @@
 // tags: 'new' | 'improved' | 'fixed' | 'balance'
 export const CHANGELOG = [
   {
+    version: '0.7.4', date: '2026-11-27', title: 'Living towns: pastimes, boats, spreading borders and a faster pace',
+    notes: [
+      ['new', 'Everyone has their own pastimes: each person loves two or three of fishing, music, dancing, storytelling, stargazing, swimming, prayer, exploring, games, gardening, napping, whittling, sparring and painting, and can\'t stand one. In the evenings they drift off to do what they love, and social ones turn into gatherings around the fire that others join. Their loves and dislike show in the citizen window.'],
+      ['new', 'Boats: open water needs boats. Research Dugout Canoes (Stone Age; everyone has them from the Bronze Age) and your people paddle across lakes and seas in canoes; Navigation gives them sailing boats. Without boats they can only wade the shallows.'],
+      ['new', 'Borders spread all the time: every settlement\'s land creeps outward into unclaimed country with ragged, natural edges, faster over plains than hills, and grows with population and era.'],
+      ['new', 'Wanderers: families hear of happy, well-fed towns and come to settle there, so young towns grow without your help.'],
+      ['balance', 'A much faster pace: children come of age in about five years, couples (and lovers) have children more often, research is about 75% faster, building is 60% faster, towns plan new buildings twice as often and build homes ahead of need, and crowded towns send out settlers much sooner.'],
+      ['balance', 'Orcs breed fast: much higher fertility, shorter gaps between children and twins are common.'],
+      ['new', 'Buildings need room: every building must keep a free tile of space around it, and trees, rocks and bushes on the spot are cleared by the builders (logs and stone go to the stores) before construction starts. The placement preview shows exactly what is wrong: red tiles are blocked, crossed orange tiles are too close to another building, yellow tiles will be cleared first, with a message saying why.'],
+      ['improved', 'You can use divine powers on computer-run peoples. Other players still have to give you permission.'],
+      ['fixed', 'Animals never wander into or spawn in water any more; any already there scramble ashore.'],
+      ['fixed', 'Hunters no longer get stuck chasing prey they cannot reach: they pick another animal or give up and come home.'],
+      ['fixed', 'Co-op: people and animals now glide smoothly on your friends\' screens instead of moving in jerky steps (the host sends updates twice as often and clients predict movement in between).'],
+      ['fixed', 'Co-op: rejoining a friend\'s world no longer asks you to design your flag again, and closing the flag designer the first time keeps your starting banner.'],
+    ],
+  },
+  {
     version: '0.7.3', date: '2026-11-27', title: 'Powers that really work, and 15 new early gifts',
     notes: [
       ['fixed', 'Weather powers now truly change the weather where you cast them, and it lasts: Fertile Rain rains for a day and a half, Call Snow snows and blankets the ground, Parting Clouds holds clear sunny skies for two days, Frost Nip, Gentle Thaw, Dry Spell, Heat Wave and Cold Snap hold their temperatures. Before, the sky snapped back within moments.'],

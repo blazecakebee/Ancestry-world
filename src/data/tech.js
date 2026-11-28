@@ -12,6 +12,7 @@ export const TECHS = [
   T('foraging', 0, 'Foraging Lore', 'berries', 'Which roots and berries are safe. +20% wild food.', { food: 0.2 }),
   T('knapping', 0, 'Stone Knapping', 'stone', 'Sharp flint tools. +25% stone, +15% wood.', { stone: 0.25, wood: 0.15 }),
   T('tailoring', 0, 'Hide Tailoring', 'hide', 'Sew hides into clothing. Everyone makes themselves an outfit. Unlocks the Tailor.', { cloth: 0.2 }, { flag: 'tailoring' }),
+  T('canoes', 0, 'Dugout Canoes', 'wood', 'Hollow out logs into boats. Your people can paddle across lakes and seas, and fishers catch more.', { food: 0.05 }),
   T('tracking', 0, 'Animal Tracking', 'beef', 'Read the tracks of game. Hunters bring back more.', { food: 0.1 }),
   T('agriculture', 0, 'Agriculture', 'wheat', 'Sow seeds and harvest fields. Leads into the Neolithic.', {}, { cap: true }),
   // ---- Neolithic

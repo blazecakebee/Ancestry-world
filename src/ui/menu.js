@@ -291,7 +291,8 @@ export function showFlagEditor(app, nation, { first = false } = {}) {
     );
   };
   render();
-  const m = modal(first ? 'Design your flag' : 'Flag & identity', body, { icon: iconImg('flag'), width: '680px' });
+  // closing the first-time designer keeps the starting banner for good: you are never asked again (e.g. on rejoining a friend's world)
+  const m = modal(first ? 'Design your flag' : 'Flag & identity', body, { icon: iconImg('flag'), width: '680px', onClose: () => { if (first && !nation.flagSet) app.session?.command({ type: 'flag', flag: nation.flag || f, name: nation.name, color: nation.color }); } });
 }
 
 // ---------- Update log ----------
